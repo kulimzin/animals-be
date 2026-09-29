@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { eq, sql } from 'drizzle-orm';
+import { count, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import { createDatabase } from '../../src/infrastructure/database.js';
@@ -18,6 +18,8 @@ import { createAnimalService } from '../../src/modules/animals/animal-service.js
 import { createPostgresClientRepository } from '../../src/modules/clients/client-repository.js';
 import { createClientService } from '../../src/modules/clients/client-service.js';
 import { createClientAuthenticationHook } from '../../src/modules/clients/http.js';
+import { createPostgresObservationRepository } from '../../src/modules/observations/observation-repository.js';
+import { createObservationService } from '../../src/modules/observations/observation-service.js';
 
 function readTestDatabaseUrl() {
   const connectionString = process.env.TEST_DATABASE_URL;
@@ -37,6 +39,7 @@ const connectionString = readTestDatabaseUrl();
 const database = createDatabase(connectionString);
 const animalService = createAnimalService(createPostgresAnimalRepository(database.db));
 const clientService = createClientService(createPostgresClientRepository(database.db));
+const observationService = createObservationService(createPostgresObservationRepository(database.db));
 let upgradeResult: {
   animalId: string;
   iconColumnCount: number;
@@ -65,6 +68,14 @@ async function seedReferences() {
   ]).returning({ id: clients.id });
   if (!animal || !author || !voter) throw new Error('Failed to create test references');
   return { animalId: animal.id, authorId: author.id, voterId: voter.id };
+}
+
+async function seedAuthenticatedClient(token = 'c'.repeat(43)) {
+  const [client] = await database.db.insert(clients).values({
+    tokenHash: createHash('sha256').update(token).digest('hex'),
+  }).returning({ id: clients.id });
+  if (!client) throw new Error('Failed to create authenticated test client');
+  return { clientId: client.id, token };
 }
 
 describe('database migrations and constraints', () => {
@@ -135,7 +146,7 @@ describe('database migrations and constraints', () => {
   });
 
   it('issues an opaque token while storing only its SHA-256 hash', async () => {
-    const app = buildApp({ animalService, clientService });
+    const app = buildApp({ animalService, clientService, observationService });
     try {
       const response = await app.inject({
         method: 'POST',
@@ -159,7 +170,7 @@ describe('database migrations and constraints', () => {
   });
 
   it('authenticates a valid bearer token and returns stable credential errors', async () => {
-    const app = buildApp({ animalService, clientService });
+    const app = buildApp({ animalService, clientService, observationService });
     app.get('/test/protected', {
       schema: { hide: true },
       preHandler: createClientAuthenticationHook(clientService),
@@ -201,7 +212,7 @@ describe('database migrations and constraints', () => {
   });
 
   it('atomically limits issuance to ten requests per address and blocks for one hour', async () => {
-    const app = buildApp({ animalService, clientService });
+    const app = buildApp({ animalService, clientService, observationService });
     try {
       const responses = await Promise.all(Array.from({ length: 12 }, () => app.inject({
         method: 'POST',
@@ -268,7 +279,7 @@ describe('database migrations and constraints', () => {
 
   it('returns active animals with both localized names', async () => {
     await database.db.update(animals).set({ isActive: false }).where(eq(animals.slug, 'tiger'));
-    const app = buildApp({ animalService, clientService });
+    const app = buildApp({ animalService, clientService, observationService });
     try {
       const response = await app.inject({ method: 'GET', url: '/animals' });
 
@@ -281,6 +292,162 @@ describe('database migrations and constraints', () => {
       expect(body.data.find((animal) => animal.slug === 'wolf')).toMatchObject({
         id: '423e53fb-01c1-521b-8b29-6cccf5268618',
         name: { ru: 'Волк', en: 'Wolf' },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('creates an observation for an active animal and validates business constraints', async () => {
+    const { token } = await seedAuthenticatedClient();
+    const app = buildApp({ animalService, clientService, observationService });
+    const headers = {
+      authorization: `Bearer ${token}`,
+      'idempotency-key': randomUUID(),
+    };
+    try {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/observations',
+        headers,
+        payload: {
+          animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+          location: { longitude: 37.6176, latitude: 55.7558 },
+          observedAt: new Date(Date.now() - 60_000).toISOString(),
+          locationLabel: 'Парк Горького',
+          note: null,
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({
+        data: {
+          animal: {
+            id: '423e53fb-01c1-521b-8b29-6cccf5268618',
+            name: { ru: 'Волк', en: 'Wolf' },
+          },
+          location: { longitude: 37.6176, latitude: 55.7558 },
+          locationLabel: 'Парк Горького',
+          note: null,
+        },
+      });
+
+      await database.db.update(animals).set({ isActive: false })
+        .where(eq(animals.id, '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4'));
+      const inactive = await app.inject({
+        method: 'POST',
+        url: '/observations',
+        headers: { ...headers, 'idempotency-key': randomUUID() },
+        payload: {
+          animalId: '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4',
+          location: { longitude: 37.6, latitude: 55.7 },
+          observedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+      });
+      expect(inactive.statusCode).toBe(422);
+      expect(inactive.json()).toMatchObject({ error: { code: 'ANIMAL_NOT_AVAILABLE' } });
+
+      const tooOld = await app.inject({
+        method: 'POST',
+        url: '/observations',
+        headers: { ...headers, 'idempotency-key': randomUUID() },
+        payload: {
+          animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+          location: { longitude: 37.6, latitude: 55.7 },
+          observedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+      });
+      expect(tooOld.statusCode).toBe(400);
+      expect(tooOld.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('creates one observation for identical concurrent retries and rejects key reuse', async () => {
+    const { token } = await seedAuthenticatedClient();
+    const app = buildApp({ animalService, clientService, observationService });
+    const idempotencyKey = randomUUID();
+    const request = {
+      method: 'POST' as const,
+      url: '/observations',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': idempotencyKey,
+      },
+      payload: {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        location: { longitude: 37.6176, latitude: 55.7558 },
+        observedAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    };
+    try {
+      const retries = await Promise.all([app.inject(request), app.inject(request)]);
+      expect(retries.map((response) => response.statusCode)).toEqual([201, 201]);
+      const ids = retries.map((response) => response.json<{ data: { id: string } }>().data.id);
+      expect(new Set(ids).size).toBe(1);
+      expect(await database.db.select({ value: count() }).from(observations)).toEqual([{ value: 1 }]);
+
+      const conflict = await app.inject({
+        ...request,
+        payload: {
+          ...request.payload,
+          location: { longitude: 37.7, latitude: 55.8 },
+        },
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_KEY_REUSED' } });
+      expect(await database.db.select({ value: count() }).from(observations)).toEqual([{ value: 1 }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('lists deactivated animals, filters by repeated animal ids and paginates by cursor', async () => {
+    const { clientId } = await seedAuthenticatedClient();
+    const wolfId = '423e53fb-01c1-521b-8b29-6cccf5268618';
+    const tigerId = '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4';
+    await database.db.insert(observations).values([
+      {
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 37.61, latitude: 55.75 },
+        observedAt: new Date(Date.now() - 60_000),
+      },
+      {
+        animalId: tigerId,
+        clientId,
+        location: { longitude: 37.62, latitude: 55.76 },
+        observedAt: new Date(Date.now() - 120_000),
+      },
+    ]);
+    await database.db.update(animals).set({ isActive: false }).where(eq(animals.id, wolfId));
+
+    const app = buildApp({ animalService, clientService, observationService });
+    try {
+      const first = await app.inject({
+        method: 'GET',
+        url: `/observations?animalId=${wolfId}&animalId=${tigerId}&limit=1`,
+      });
+      expect(first.statusCode).toBe(200);
+      const firstBody = first.json<{
+        data: Array<{ animal: { id: string; name: { ru: string; en: string } } }>;
+        meta: { nextCursor: string | null };
+      }>();
+      expect(firstBody.data).toHaveLength(1);
+      expect(firstBody.data[0]?.animal).toEqual({
+        id: wolfId,
+        name: { ru: 'Волк', en: 'Wolf' },
+      });
+      expect(firstBody.meta.nextCursor).toEqual(expect.any(String));
+
+      const second = await app.inject({
+        method: 'GET',
+        url: `/observations?animalId=${wolfId}&animalId=${tigerId}&limit=1&cursor=${encodeURIComponent(firstBody.meta.nextCursor ?? '')}`,
+      });
+      expect(second.statusCode).toBe(200);
+      expect(second.json()).toMatchObject({
+        data: [{ animal: { id: tigerId, name: { ru: 'Тигр', en: 'Tiger' } } }],
+        meta: { nextCursor: null },
       });
     } finally {
       await app.close();

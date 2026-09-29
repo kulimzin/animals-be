@@ -6,6 +6,8 @@ import { createPostgresAnimalRepository } from './modules/animals/animal-reposit
 import { createAnimalService } from './modules/animals/animal-service.js';
 import { createPostgresClientRepository } from './modules/clients/client-repository.js';
 import { createClientService } from './modules/clients/client-service.js';
+import { createPostgresObservationRepository } from './modules/observations/observation-repository.js';
+import { createObservationService } from './modules/observations/observation-service.js';
 
 async function main() {
   const environment = readEnvironment(process.env);
@@ -13,6 +15,7 @@ async function main() {
   const app = buildApp({
     animalService: createAnimalService(createPostgresAnimalRepository(db)),
     clientService: createClientService(createPostgresClientRepository(db)),
+    observationService: createObservationService(createPostgresObservationRepository(db)),
     trustProxy: environment.TRUST_PROXY,
     logger: {
       level: environment.LOG_LEVEL,

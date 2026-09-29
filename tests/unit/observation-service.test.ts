@@ -3,6 +3,7 @@ import { ApiError } from '../../src/shared/http/api-error.js';
 import type {
   CreateObservationInput,
   ListObservationsInput,
+  MapObservationRecord,
   ObservationRecord,
   ObservationRepository,
 } from '../../src/modules/observations/observation-repository.js';
@@ -29,10 +30,19 @@ const draft = {
   note: null,
 };
 
+const mapObservation: MapObservationRecord = {
+  id: observation.id,
+  animalId: observation.animalId,
+  location: observation.location,
+  observedAt: observation.observedAt,
+  confirmVotes: 2,
+  rejectVotes: 1,
+};
+
 function createRepository(overrides: Partial<ObservationRepository> = {}): ObservationRepository {
   return {
     create: () => Promise.resolve({ status: 'created', observation }),
-    list: () => Promise.resolve({ observations: [], hasMore: false }),
+    list: () => Promise.resolve({ status: 'ok', observations: [], hasMore: false }),
     ...overrides,
   };
 }
@@ -89,33 +99,57 @@ describe('observation service', () => {
     expect(inputs[0]?.descriptionsEnabled).toBe(false);
   });
 
-  it('deduplicates filters and round-trips an opaque cursor', async () => {
+  it('returns map observations and truncation metadata', async () => {
     const inputs: ListObservationsInput[] = [];
     const repository = createRepository({
       list: (input) => {
         inputs.push(input);
-        return Promise.resolve(inputs.length === 1
-          ? { observations: [observation], hasMore: true }
-          : { observations: [], hasMore: false });
+        return Promise.resolve({
+          status: 'ok',
+          observations: [mapObservation],
+          hasMore: true,
+        });
       },
     });
     const service = createObservationService(repository);
+    const input: ListObservationsInput = {
+      animalIds: [observation.animalId],
+      period: '24h',
+      west: 30,
+      south: 50,
+      east: 40,
+      north: 60,
+      limit: 2000,
+    };
 
-    const first = await service.list([observation.animalId, observation.animalId], 100);
-    expect(first.nextCursor).toEqual(expect.any(String));
-    await service.list([], 100, first.nextCursor ?? undefined);
-
-    expect(inputs[0]?.animalIds).toEqual([observation.animalId]);
-    expect(inputs[1]?.cursor).toEqual({ observedAt: observation.observedAt, id: observation.id });
+    await expect(service.list(input)).resolves.toEqual({
+      observations: [mapObservation],
+      truncated: true,
+      limit: 2000,
+    });
+    expect(inputs).toEqual([input]);
   });
 
-  it('rejects malformed cursors as validation errors', async () => {
-    const service = createObservationService(createRepository());
+  it('rejects unknown animal filters as validation errors', async () => {
+    const service = createObservationService(createRepository({
+      list: () => Promise.resolve({ status: 'animals-not-found' }),
+    }));
 
-    await expect(service.list([], 100, 'not-a-cursor')).rejects.toMatchObject<ApiError>({
+    await expect(service.list({
+      animalIds: [observation.animalId],
+      period: '24h',
+      west: 30,
+      south: 50,
+      east: 40,
+      north: 60,
+      limit: 2000,
+    })).rejects.toMatchObject<ApiError>({
       statusCode: 400,
       code: 'VALIDATION_ERROR',
-      details: [{ path: '/query/cursor', message: 'Invalid cursor' }],
+      details: [{
+        path: '/query/animalIds',
+        message: 'One or more animals do not exist',
+      }],
     });
   });
 });

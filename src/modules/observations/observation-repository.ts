@@ -1,9 +1,10 @@
-import { and, desc, eq, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import type { Database } from '../../infrastructure/database.js';
 import {
   animals,
   observationIdempotency,
   observations,
+  votes,
 } from '../../infrastructure/database/schema.js';
 
 const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -39,18 +40,30 @@ export type CreateObservationResult =
   | { status: 'idempotency-conflict' }
   | { status: 'observed-at-invalid' };
 
-export type ObservationCursor = { observedAt: Date; id: string };
+export type ObservationPeriod = '1h' | '24h' | '7d' | '30d';
+
+export type MapObservationRecord = {
+  id: string;
+  animalId: string;
+  location: { longitude: number; latitude: number };
+  observedAt: Date;
+  confirmVotes: number;
+  rejectVotes: number;
+};
 
 export type ListObservationsInput = {
   animalIds: string[];
+  period: ObservationPeriod;
+  west: number;
+  south: number;
+  east: number;
+  north: number;
   limit: number;
-  cursor?: ObservationCursor;
 };
 
-export type ListObservationsResult = {
-  observations: ObservationRecord[];
-  hasMore: boolean;
-};
+export type ListObservationsResult =
+  | { status: 'ok'; observations: MapObservationRecord[]; hasMore: boolean }
+  | { status: 'animals-not-found' };
 
 export type ObservationRepository = {
   create(input: CreateObservationInput): Promise<CreateObservationResult>;
@@ -67,6 +80,39 @@ const observationSelection = {
   locationLabel: observations.locationLabel,
   note: observations.note,
 };
+
+function createMapLocationFilter(input: ListObservationsInput) {
+  if (input.west === input.east || input.south === input.north) {
+    if (input.west <= input.east) {
+      return sql`
+        ST_X(${observations.location}) BETWEEN ${input.west} AND ${input.east}
+        AND ST_Y(${observations.location}) BETWEEN ${input.south} AND ${input.north}
+      `;
+    }
+    return sql`
+      (ST_X(${observations.location}) >= ${input.west}
+        OR ST_X(${observations.location}) <= ${input.east})
+      AND ST_Y(${observations.location}) BETWEEN ${input.south} AND ${input.north}
+    `;
+  }
+
+  if (input.west <= input.east) {
+    return sql`ST_Intersects(
+      ${observations.location},
+      ST_MakeEnvelope(${input.west}, ${input.south}, ${input.east}, ${input.north}, 4326)
+    )`;
+  }
+  return sql`(
+    ST_Intersects(
+      ${observations.location},
+      ST_MakeEnvelope(${input.west}, ${input.south}, 180, ${input.north}, 4326)
+    )
+    OR ST_Intersects(
+      ${observations.location},
+      ST_MakeEnvelope(-180, ${input.south}, ${input.east}, ${input.north}, 4326)
+    )
+  )`;
+}
 
 export function createPostgresObservationRepository(database: Database): ObservationRepository {
   return {
@@ -155,29 +201,47 @@ export function createPostgresObservationRepository(database: Database): Observa
     },
 
     async list(input) {
-      const filters = [];
-      if (input.animalIds.length > 0) filters.push(inArray(observations.animalId, input.animalIds));
-      if (input.cursor) {
-        filters.push(or(
-          lt(observations.observedAt, input.cursor.observedAt),
-          and(
-            eq(observations.observedAt, input.cursor.observedAt),
-            lt(observations.id, input.cursor.id),
-          ),
-        ));
-      }
+      return database.transaction(async (transaction) => {
+        const knownAnimals = await transaction.select({ id: animals.id })
+          .from(animals)
+          .where(inArray(animals.id, input.animalIds));
+        if (knownAnimals.length !== input.animalIds.length) {
+          return { status: 'animals-not-found' };
+        }
 
-      const rows = await database.select(observationSelection)
-        .from(observations)
-        .innerJoin(animals, eq(animals.id, observations.animalId))
-        .where(filters.length > 0 ? and(...filters) : undefined)
-        .orderBy(desc(observations.observedAt), desc(observations.id))
-        .limit(input.limit + 1);
+        const periodSeconds = {
+          '1h': 60 * 60,
+          '24h': 24 * 60 * 60,
+          '7d': 7 * 24 * 60 * 60,
+          '30d': 30 * 24 * 60 * 60,
+        }[input.period];
+        const locationFilter = createMapLocationFilter(input);
 
-      return {
-        observations: rows.slice(0, input.limit),
-        hasMore: rows.length > input.limit,
-      };
+        const rows = await transaction.select({
+          id: observations.id,
+          animalId: observations.animalId,
+          location: observations.location,
+          observedAt: observations.observedAt,
+          confirmVotes: sql<number>`count(*) filter (where ${votes.value} = 'confirm')::integer`,
+          rejectVotes: sql<number>`count(*) filter (where ${votes.value} = 'reject')::integer`,
+        })
+          .from(observations)
+          .leftJoin(votes, eq(votes.observationId, observations.id))
+          .where(and(
+            inArray(observations.animalId, input.animalIds),
+            sql`${observations.observedAt} > now() - make_interval(secs => ${periodSeconds})`,
+            locationFilter,
+          ))
+          .groupBy(observations.id)
+          .orderBy(desc(observations.observedAt), asc(observations.id))
+          .limit(input.limit + 1);
+
+        return {
+          status: 'ok',
+          observations: rows.slice(0, input.limit),
+          hasMore: rows.length > input.limit,
+        };
+      });
     },
   };
 }

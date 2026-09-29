@@ -15,7 +15,9 @@
     "test:integration": "node --env-file=.env.test node_modules/vitest/vitest.mjs run --project integration",
     "check": "npm run build && npm run lint && npm test",
     "db:up": "docker compose up -d --wait db",
-    "db:test:up": "docker compose --env-file .env.test --profile test up -d --wait db-test"
+    "db:test:up": "docker compose --env-file .env.test --profile test up -d --wait db-test",
+    "db:generate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --env-file=.env --import tsx src/infrastructure/database/migrate.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",
@@ -27,6 +29,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.0",
     "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.8",
     "eslint": "^10.11.0",
     "tsx": "^4.23.15",
     "typescript": "~6.0",

@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
+import * as schema from './database/schema.js';
 
 export function createDatabase(connectionString: string) {
   const pool = new pg.Pool({
@@ -8,5 +9,5 @@ export function createDatabase(connectionString: string) {
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30_000,
   });
-  return { pool, db: drizzle(pool) };
+  return { pool, db: drizzle(pool, { schema }) };
 }

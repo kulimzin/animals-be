@@ -2,14 +2,20 @@ import { sql } from 'drizzle-orm';
 import { buildApp } from './app.js';
 import { readEnvironment } from './config/env.js';
 import { createDatabase } from './infrastructure/database.js';
+import { createPostgresClientRepository } from './modules/clients/client-repository.js';
+import { createClientService } from './modules/clients/client-service.js';
 
 async function main() {
   const environment = readEnvironment(process.env);
-  const app = buildApp({
-    level: environment.LOG_LEVEL,
-    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
-  });
   const { pool, db } = createDatabase(environment.DATABASE_URL);
+  const app = buildApp({
+    clientService: createClientService(createPostgresClientRepository(db)),
+    trustProxy: environment.TRUST_PROXY,
+    logger: {
+      level: environment.LOG_LEVEL,
+      redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+    },
+  });
 
   pool.on('error', () => {
     app.log.error('Idle database connection failed');

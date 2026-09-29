@@ -11,6 +11,15 @@ describe('environment', () => {
     expect(readEnvironment({ DATABASE_URL, PORT: '8080', LOG_LEVEL: 'warn' }).PORT).toBe(8080);
   });
 
+  it('accepts only explicit proxy IP addresses and networks', () => {
+    expect(readEnvironment({
+      DATABASE_URL,
+      TRUST_PROXY: '127.0.0.1, 2001:db8::/32',
+    }).TRUST_PROXY).toEqual(['127.0.0.1', '2001:db8::/32']);
+    expect(() => readEnvironment({ DATABASE_URL, TRUST_PROXY: 'proxy.example.com' }))
+      .toThrow('TRUST_PROXY');
+  });
+
   it.each(['', '0', '-1', '65536', '1.5', 'invalid'])('rejects invalid port %j', (PORT) => {
     expect(() => readEnvironment({ DATABASE_URL, PORT })).toThrow('PORT');
   });

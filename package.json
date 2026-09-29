@@ -20,8 +20,11 @@
     "db:migrate": "node --env-file=.env --import tsx src/infrastructure/database/migrate.ts"
   },
   "dependencies": {
+    "@fastify/swagger": "^9.9.0",
     "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",
+    "fastify-type-provider-zod": "^7.0.0",
+    "ipaddr.js": "^2.5.0",
     "pg": "^8.23.0",
     "zod": "^4.6.5"
   },

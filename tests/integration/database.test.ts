@@ -1,15 +1,20 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { buildApp } from '../../src/app.js';
 import { createDatabase } from '../../src/infrastructure/database.js';
 import { applyMigrations } from '../../src/infrastructure/database/migrate.js';
 import {
   animals,
+  clientIssuanceEvents,
   clients,
   observationIdempotency,
   observations,
   votes,
 } from '../../src/infrastructure/database/schema.js';
+import { createPostgresClientRepository } from '../../src/modules/clients/client-repository.js';
+import { createClientService } from '../../src/modules/clients/client-service.js';
+import { createClientAuthenticationHook } from '../../src/modules/clients/http.js';
 
 function readTestDatabaseUrl() {
   const connectionString = process.env.TEST_DATABASE_URL;
@@ -27,6 +32,7 @@ function readTestDatabaseUrl() {
 
 const connectionString = readTestDatabaseUrl();
 const database = createDatabase(connectionString);
+const clientService = createClientService(createPostgresClientRepository(database.db));
 
 async function seedReferences() {
   const [animal] = await database.db.insert(animals).values({
@@ -51,6 +57,100 @@ describe('database migrations and constraints', () => {
     await applyMigrations(connectionString);
     // Applying the command repeatedly must not replay an already recorded migration.
     await applyMigrations(connectionString);
+  });
+
+  it('issues an opaque token while storing only its SHA-256 hash', async () => {
+    const app = buildApp({ clientService });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/clients',
+        remoteAddress: '203.0.113.10',
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.headers['cache-control']).toBe('no-store');
+      const body = response.json<{ data: { token: string } }>();
+      expect(body.data.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+      const storedClients = await database.db.select({ tokenHash: clients.tokenHash }).from(clients);
+      expect(storedClients).toEqual([{
+        tokenHash: createHash('sha256').update(body.data.token).digest('hex'),
+      }]);
+      expect(JSON.stringify(storedClients)).not.toContain(body.data.token);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('authenticates a valid bearer token and returns stable credential errors', async () => {
+    const app = buildApp({ clientService });
+    app.get('/test/protected', {
+      schema: { hide: true },
+      preHandler: createClientAuthenticationHook(clientService),
+    }, (request) => ({ data: { clientId: request.client?.id } }));
+
+    try {
+      const issuance = await app.inject({
+        method: 'POST',
+        url: '/clients',
+        remoteAddress: '203.0.113.11',
+      });
+      const token = issuance.json<{ data: { token: string } }>().data.token;
+
+      const missing = await app.inject({ method: 'GET', url: '/test/protected' });
+      expect(missing.statusCode).toBe(401);
+      expect(missing.headers['www-authenticate']).toBe('Bearer');
+      expect(missing.json()).toMatchObject({ error: { code: 'CLIENT_TOKEN_REQUIRED' } });
+
+      const invalid = await app.inject({
+        method: 'GET',
+        url: '/test/protected',
+        headers: { authorization: `Bearer ${'a'.repeat(43)}` },
+      });
+      expect(invalid.statusCode).toBe(401);
+      expect(invalid.headers['www-authenticate']).toBe('Bearer');
+      expect(invalid.json()).toMatchObject({ error: { code: 'CLIENT_TOKEN_INVALID' } });
+
+      const authenticated = await app.inject({
+        method: 'GET',
+        url: '/test/protected',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(authenticated.statusCode).toBe(200);
+      const authenticatedBody = authenticated.json<{ data: { clientId: string } }>();
+      expect(authenticatedBody.data.clientId).toMatch(/^[0-9a-f-]{36}$/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('atomically limits issuance to ten requests per address and blocks for one hour', async () => {
+    const app = buildApp({ clientService });
+    try {
+      const responses = await Promise.all(Array.from({ length: 12 }, () => app.inject({
+        method: 'POST',
+        url: '/clients',
+        remoteAddress: '2001:db8:1234:5678::1234',
+      })));
+      const statuses = responses.map((response) => response.statusCode).sort();
+      expect(statuses).toEqual([...Array<number>(10).fill(201), 429, 429]);
+
+      const limited = responses.find((response) => response.statusCode === 429);
+      expect(limited?.headers['retry-after']).toBe('3600');
+      expect(limited?.json()).toMatchObject({
+        error: { code: 'CLIENT_ISSUANCE_RATE_LIMITED' },
+      });
+
+      const storedClients = await database.db.select().from(clients);
+      const events = await database.db.select({ wasIssued: clientIssuanceEvents.wasIssued })
+        .from(clientIssuanceEvents);
+      expect(storedClients).toHaveLength(10);
+      expect(events.filter((event) => event.wasIssued)).toHaveLength(10);
+      expect(events.filter((event) => !event.wasIssued)).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
   });
 
   beforeEach(async () => {

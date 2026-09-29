@@ -335,6 +335,7 @@ describe('database migrations and constraints', () => {
       authorization: `Bearer ${token}`,
       'idempotency-key': randomUUID(),
     };
+    const observedAt = new Date(Date.now() - 60_000).toISOString();
     try {
       const created = await app.inject({
         method: 'POST',
@@ -343,21 +344,25 @@ describe('database migrations and constraints', () => {
         payload: {
           animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
           location: { longitude: 37.6176, latitude: 55.7558 },
-          observedAt: new Date(Date.now() - 60_000).toISOString(),
+          observedAt,
           locationLabel: 'Парк Горького',
           note: null,
         },
       });
       expect(created.statusCode).toBe(201);
-      expect(created.json()).toMatchObject({
+      expect(created.headers['cache-control']).toBe('private, no-store');
+      const createdBody = created.json<{ data: { id: string; observedAt: string } }>();
+      expect(createdBody.data.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(createdBody).toEqual({
         data: {
-          animal: {
-            id: '423e53fb-01c1-521b-8b29-6cccf5268618',
-            name: { ru: 'Волк', en: 'Wolf' },
-          },
-          location: { longitude: 37.6176, latitude: 55.7558 },
-          locationLabel: 'Парк Горького',
+          id: createdBody.data.id,
+          animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+          location: { longitude: 37.6176, latitude: 55.7558, label: 'Парк Горького' },
+          observedAt,
           note: null,
+          votes: { confirm: 0, reject: 0 },
+          confirmationPercent: null,
+          userVote: null,
         },
       });
 
@@ -394,7 +399,7 @@ describe('database migrations and constraints', () => {
   });
 
   it('creates one observation for identical concurrent retries and rejects key reuse', async () => {
-    const { token } = await seedAuthenticatedClient();
+    const { clientId, token } = await seedAuthenticatedClient();
     const app = buildApp({ animalService, clientService, observationService });
     const idempotencyKey = randomUUID();
     const request = {
@@ -417,6 +422,28 @@ describe('database migrations and constraints', () => {
       expect(new Set(ids).size).toBe(1);
       expect(await database.db.select({ value: count() }).from(observations)).toEqual([{ value: 1 }]);
 
+      const observationId = ids[0];
+      if (!observationId) throw new Error('Concurrent creation did not return an observation id');
+      const [{ id: otherClientId } = {}] = await database.db.insert(clients).values({
+        tokenHash: 'f'.repeat(64),
+      }).returning({ id: clients.id });
+      if (!otherClientId) throw new Error('Failed to create another voter');
+      await database.db.insert(votes).values([
+        { observationId, clientId, value: 'confirm' },
+        { observationId, clientId: otherClientId, value: 'reject' },
+      ]);
+
+      const replayed = await app.inject(request);
+      expect(replayed.statusCode).toBe(201);
+      expect(replayed.json()).toMatchObject({
+        data: {
+          id: observationId,
+          votes: { confirm: 1, reject: 1 },
+          confirmationPercent: 50,
+          userVote: 'confirm',
+        },
+      });
+
       const conflict = await app.inject({
         ...request,
         payload: {
@@ -427,6 +454,91 @@ describe('database migrations and constraints', () => {
       expect(conflict.statusCode).toBe(409);
       expect(conflict.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_KEY_REUSED' } });
       expect(await database.db.select({ value: count() }).from(observations)).toEqual([{ value: 1 }]);
+
+      await database.db.delete(observations).where(eq(observations.id, observationId));
+      const gone = await app.inject(request);
+      expect(gone.statusCode).toBe(409);
+      expect(gone.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_RESULT_GONE' } });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns personalized details and hides unknown, deleted and expired observations uniformly', async () => {
+    const { clientId, token } = await seedAuthenticatedClient();
+    const { clientId: otherClientId, token: otherToken } = await seedAuthenticatedClient('g'.repeat(43));
+    const now = Date.now();
+    const [current, expired, deleted] = await database.db.insert(observations).values([
+      {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        clientId,
+        location: { longitude: 37.6176, latitude: 55.7558 },
+        locationLabel: 'Парк Горького',
+        observedAt: new Date(now - 60_000),
+        note: 'У воды',
+      },
+      {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        clientId,
+        location: { longitude: 30, latitude: 50 },
+        observedAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+      },
+      {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        clientId,
+        location: { longitude: 31, latitude: 51 },
+        observedAt: new Date(now - 60_000),
+      },
+    ]).returning({ id: observations.id });
+    if (!current || !expired || !deleted) throw new Error('Failed to create detail fixtures');
+    await database.db.insert(votes).values([
+      { observationId: current.id, clientId, value: 'confirm' },
+      { observationId: current.id, clientId: otherClientId, value: 'reject' },
+    ]);
+    await database.db.delete(observations).where(eq(observations.id, deleted.id));
+
+    const app = buildApp({ animalService, clientService, observationService });
+    try {
+      const ownDetails = await app.inject({
+        method: 'GET',
+        url: `/api/v1/observations/${current.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(ownDetails.statusCode).toBe(200);
+      expect(ownDetails.headers['cache-control']).toBe('private, no-store');
+      expect(ownDetails.json()).toEqual({
+        data: {
+          id: current.id,
+          animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+          location: { longitude: 37.6176, latitude: 55.7558, label: 'Парк Горького' },
+          observedAt: new Date(now - 60_000).toISOString(),
+          note: 'У воды',
+          votes: { confirm: 1, reject: 1 },
+          confirmationPercent: 50,
+          userVote: 'confirm',
+        },
+      });
+
+      const otherDetails = await app.inject({
+        method: 'GET',
+        url: `/api/v1/observations/${current.id}`,
+        headers: { authorization: `Bearer ${otherToken}` },
+      });
+      expect(otherDetails.statusCode).toBe(200);
+      expect(otherDetails.json()).toMatchObject({ data: { userVote: 'reject' } });
+
+      for (const id of [randomUUID(), deleted.id, expired.id]) {
+        const missing = await app.inject({
+          method: 'GET',
+          url: `/api/v1/observations/${id}`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(missing.statusCode).toBe(404);
+        expect(missing.json()).toEqual({
+          error: { code: 'OBSERVATION_NOT_FOUND', message: 'Observation not found' },
+        });
+      }
     } finally {
       await app.close();
     }

@@ -10,15 +10,16 @@ import {
 const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const OBSERVATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type ObservationRecord = {
+export type ObservationDetailsRecord = {
   id: string;
   animalId: string;
-  animalNameRu: string;
-  animalNameEn: string;
   location: { longitude: number; latitude: number };
   observedAt: Date;
   locationLabel: string | null;
   note: string | null;
+  confirmVotes: number;
+  rejectVotes: number;
+  userVote: 'confirm' | 'reject' | null;
 };
 
 export type CreateObservationInput = {
@@ -34,10 +35,11 @@ export type CreateObservationInput = {
 };
 
 export type CreateObservationResult =
-  | { status: 'created' | 'replayed'; observation: ObservationRecord }
+  | { status: 'created' | 'replayed'; observation: ObservationDetailsRecord }
   | { status: 'animal-not-available' }
   | { status: 'description-disabled' }
   | { status: 'idempotency-conflict' }
+  | { status: 'idempotency-result-gone' }
   | { status: 'observed-at-invalid' };
 
 export type ObservationPeriod = '1h' | '24h' | '7d' | '30d';
@@ -67,19 +69,30 @@ export type ListObservationsResult =
 
 export type ObservationRepository = {
   create(input: CreateObservationInput): Promise<CreateObservationResult>;
+  findDetails(id: string, clientId: string): Promise<ObservationDetailsRecord | null>;
   list(input: ListObservationsInput): Promise<ListObservationsResult>;
 };
 
-const observationSelection = {
+const observationDetailsSelection = (clientId: string) => ({
   id: observations.id,
   animalId: observations.animalId,
-  animalNameRu: animals.nameRu,
-  animalNameEn: animals.nameEn,
   location: observations.location,
   observedAt: observations.observedAt,
   locationLabel: observations.locationLabel,
   note: observations.note,
-};
+  confirmVotes: sql<number>`(
+    select count(*)::integer from ${votes}
+    where ${votes.observationId} = ${observations.id} and ${votes.value} = 'confirm'
+  )`,
+  rejectVotes: sql<number>`(
+    select count(*)::integer from ${votes}
+    where ${votes.observationId} = ${observations.id} and ${votes.value} = 'reject'
+  )`,
+  userVote: sql<'confirm' | 'reject' | null>`(
+    select ${votes.value} from ${votes}
+    where ${votes.observationId} = ${observations.id} and ${votes.clientId} = ${clientId}
+  )`,
+});
 
 function createMapLocationFilter(input: ListObservationsInput) {
   if (input.west === input.east || input.south === input.north) {
@@ -143,14 +156,16 @@ export function createPostgresObservationRepository(database: Database): Observa
 
         if (existing) {
           if (existing.requestHash !== input.requestHash) return { status: 'idempotency-conflict' };
-          if (!existing.observationId) throw new Error('Idempotent observation no longer exists');
+          if (!existing.observationId) return { status: 'idempotency-result-gone' };
 
-          const [observation] = await transaction.select(observationSelection)
+          const [observation] = await transaction.select(observationDetailsSelection(input.clientId))
             .from(observations)
-            .innerJoin(animals, eq(animals.id, observations.animalId))
-            .where(eq(observations.id, existing.observationId))
+            .where(and(
+              eq(observations.id, existing.observationId),
+              sql`${observations.observedAt} > now() - interval '30 days'`,
+            ))
             .limit(1);
-          if (!observation) throw new Error('Idempotent observation could not be loaded');
+          if (!observation) return { status: 'idempotency-result-gone' };
           return { status: 'replayed', observation };
         }
 
@@ -190,14 +205,24 @@ export function createPostgresObservationRepository(database: Database): Observa
           expiresAt: new Date(now.getTime() + IDEMPOTENCY_WINDOW_MS),
         });
 
-        const [observation] = await transaction.select(observationSelection)
+        const [observation] = await transaction.select(observationDetailsSelection(input.clientId))
           .from(observations)
-          .innerJoin(animals, eq(animals.id, observations.animalId))
           .where(eq(observations.id, created.id))
           .limit(1);
         if (!observation) throw new Error('Created observation could not be loaded');
         return { status: 'created', observation };
       });
+    },
+
+    async findDetails(id, clientId) {
+      const [observation] = await database.select(observationDetailsSelection(clientId))
+        .from(observations)
+        .where(and(
+          eq(observations.id, id),
+          sql`${observations.observedAt} > now() - interval '30 days'`,
+        ))
+        .limit(1);
+      return observation ?? null;
     },
 
     async list(input) {

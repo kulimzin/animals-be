@@ -4,21 +4,22 @@ import type {
   CreateObservationInput,
   ListObservationsInput,
   MapObservationRecord,
-  ObservationRecord,
+  ObservationDetailsRecord,
   ObservationRepository,
 } from '../../src/modules/observations/observation-repository.js';
 import { createObservationService } from '../../src/modules/observations/observation-service.js';
 import { createPublicConfig } from '../../src/modules/config/public-config.js';
 
-const observation: ObservationRecord = {
+const observation: ObservationDetailsRecord = {
   id: '6ee21c62-18a9-4e82-a487-adcf49ce747d',
   animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
-  animalNameRu: 'Волк',
-  animalNameEn: 'Wolf',
   location: { longitude: 37.6176, latitude: 55.7558 },
   observedAt: new Date('2026-09-29T07:15:00.000Z'),
   locationLabel: null,
   note: null,
+  confirmVotes: 2,
+  rejectVotes: 1,
+  userVote: 'confirm',
 };
 
 const draft = {
@@ -42,6 +43,7 @@ const mapObservation: MapObservationRecord = {
 function createRepository(overrides: Partial<ObservationRepository> = {}): ObservationRepository {
   return {
     create: () => Promise.resolve({ status: 'created', observation }),
+    findDetails: () => Promise.resolve(observation),
     list: () => Promise.resolve({ status: 'ok', observations: [], hasMore: false }),
     ...overrides,
   };
@@ -73,6 +75,7 @@ describe('observation service', () => {
     ['animal-not-available', 422, 'ANIMAL_NOT_AVAILABLE'],
     ['description-disabled', 422, 'DESCRIPTION_DISABLED'],
     ['idempotency-conflict', 409, 'IDEMPOTENCY_KEY_REUSED'],
+    ['idempotency-result-gone', 409, 'IDEMPOTENCY_RESULT_GONE'],
     ['observed-at-invalid', 400, 'VALIDATION_ERROR'],
   ] as const)('maps %s to a stable API error', async (status, statusCode, code) => {
     const service = createObservationService(createRepository({
@@ -82,6 +85,30 @@ describe('observation service', () => {
     await expect(service.create('client-id', draft)).rejects.toMatchObject<ApiError>({
       statusCode,
       code,
+    });
+  });
+
+  it('returns details personalized for the authenticated client', async () => {
+    const calls: Array<{ id: string; clientId: string }> = [];
+    const service = createObservationService(createRepository({
+      findDetails: (id, clientId) => {
+        calls.push({ id, clientId });
+        return Promise.resolve(observation);
+      },
+    }));
+
+    await expect(service.getDetails(observation.id, 'client-id')).resolves.toBe(observation);
+    expect(calls).toEqual([{ id: observation.id, clientId: 'client-id' }]);
+  });
+
+  it('uses the same not-found error for unavailable observation details', async () => {
+    const service = createObservationService(createRepository({
+      findDetails: () => Promise.resolve(null),
+    }));
+
+    await expect(service.getDetails(observation.id, 'client-id')).rejects.toMatchObject<ApiError>({
+      statusCode: 404,
+      code: 'OBSERVATION_NOT_FOUND',
     });
   });
 

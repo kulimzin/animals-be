@@ -3,8 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { errorResponseSchema, successResponseSchema } from '../../shared/http/schemas.js';
 import { MAP_RESULT_LIMIT, NOTE_MAX_LENGTH } from '../config/public-config.js';
-import type { MapObservationRecord } from './observation-repository.js';
-import type { ObservationRecord } from './observation-repository.js';
+import type { MapObservationRecord, ObservationDetailsRecord } from './observation-repository.js';
 import type { ObservationService } from './observation-service.js';
 
 const optionalText = (maximum: number) => z.string().max(maximum)
@@ -17,19 +16,20 @@ const locationSchema = z.object({
   latitude: z.number().min(-90).max(90),
 }).strict();
 
-const observationSchema = z.object({
+const observationDetailsSchema = z.object({
   id: z.uuid(),
-  animal: z.object({
-    id: z.uuid(),
-    name: z.object({
-      ru: z.string(),
-      en: z.string(),
-    }),
+  animalId: z.uuid(),
+  location: locationSchema.extend({
+    label: z.string().nullable(),
   }),
-  location: locationSchema,
   observedAt: z.iso.datetime(),
-  locationLabel: z.string().nullable(),
   note: z.string().nullable(),
+  votes: z.object({
+    confirm: z.number().int().nonnegative(),
+    reject: z.number().int().nonnegative(),
+  }),
+  confirmationPercent: z.number().int().min(0).max(100).nullable(),
+  userVote: z.enum(['confirm', 'reject']).nullable(),
 });
 
 const createObservationBodySchema = z.object({
@@ -78,7 +78,7 @@ const listObservationsQuerySchema = z.object({
   message: 'South must not be greater than north',
 });
 
-const createObservationResponseSchema = successResponseSchema(observationSchema);
+const observationDetailsResponseSchema = successResponseSchema(observationDetailsSchema);
 const mapObservationSchema = z.object({
   id: z.uuid(),
   animalId: z.uuid(),
@@ -96,25 +96,34 @@ const listObservationsResponseSchema = z.object({
   limit: z.literal(MAP_RESULT_LIMIT),
 });
 
-function toObservationDto(observation: ObservationRecord) {
+function calculateConfirmationPercent(confirmVotes: number, rejectVotes: number) {
+  const totalVotes = confirmVotes + rejectVotes;
+  return totalVotes === 0 ? null : Math.floor((confirmVotes * 100) / totalVotes + 0.5);
+}
+
+function toObservationDetailsDto(observation: ObservationDetailsRecord) {
   return {
     id: observation.id,
-    animal: {
-      id: observation.animalId,
-      name: {
-        ru: observation.animalNameRu,
-        en: observation.animalNameEn,
-      },
+    animalId: observation.animalId,
+    location: {
+      ...observation.location,
+      label: observation.locationLabel,
     },
-    location: observation.location,
     observedAt: observation.observedAt.toISOString(),
-    locationLabel: observation.locationLabel,
     note: observation.note,
+    votes: {
+      confirm: observation.confirmVotes,
+      reject: observation.rejectVotes,
+    },
+    confirmationPercent: calculateConfirmationPercent(
+      observation.confirmVotes,
+      observation.rejectVotes,
+    ),
+    userVote: observation.userVote,
   };
 }
 
 function toMapObservationDto(observation: MapObservationRecord) {
-  const totalVotes = observation.confirmVotes + observation.rejectVotes;
   return {
     id: observation.id,
     animalId: observation.animalId,
@@ -124,9 +133,10 @@ function toMapObservationDto(observation: MapObservationRecord) {
       confirm: observation.confirmVotes,
       reject: observation.rejectVotes,
     },
-    confirmationPercent: totalVotes === 0
-      ? null
-      : Math.floor((observation.confirmVotes * 100) / totalVotes + 0.5),
+    confirmationPercent: calculateConfirmationPercent(
+      observation.confirmVotes,
+      observation.rejectVotes,
+    ),
   };
 }
 
@@ -143,7 +153,7 @@ export function registerObservationRoutes(
       headers: createObservationHeadersSchema,
       body: createObservationBodySchema,
       response: {
-        201: createObservationResponseSchema,
+        201: observationDetailsResponseSchema,
         400: errorResponseSchema,
         401: errorResponseSchema,
         409: errorResponseSchema,
@@ -160,7 +170,30 @@ export function registerObservationRoutes(
       locationLabel: request.body.locationLabel ?? null,
       note: request.body.note ?? null,
     });
-    return reply.status(201).send({ data: toObservationDto(observation) });
+    return reply.header('Cache-Control', 'private, no-store')
+      .status(201)
+      .send({ data: toObservationDetailsDto(observation) });
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().get('/observations/:id', {
+    schema: {
+      operationId: 'getObservation',
+      summary: 'Get observation details',
+      tags: ['observations'],
+      security: [{ bearerAuth: [] }],
+      params: z.object({ id: z.uuid() }),
+      response: {
+        200: observationDetailsResponseSchema,
+        400: errorResponseSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    if (!request.client) throw new Error('Authenticated client is missing');
+    const observation = await observationService.getDetails(request.params.id, request.client.id);
+    return reply.header('Cache-Control', 'private, no-store')
+      .send({ data: toObservationDetailsDto(observation) });
   });
 
   app.withTypeProvider<ZodTypeProvider>().get('/observations', {

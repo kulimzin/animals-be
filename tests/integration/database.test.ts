@@ -501,55 +501,239 @@ describe('database migrations and constraints', () => {
     }
   });
 
-  it('lists deactivated animals, filters by repeated animal ids and paginates by cursor', async () => {
+  it('filters map observations by animals, period and bounds with stable vote aggregates', async () => {
     const { clientId, token } = await seedAuthenticatedClient();
     const wolfId = '423e53fb-01c1-521b-8b29-6cccf5268618';
     const tigerId = '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4';
+    const now = Date.now();
+    const ids = {
+      first: '00000000-0000-4000-8000-000000000001',
+      second: '00000000-0000-4000-8000-000000000002',
+      eastOfDateLine: '00000000-0000-4000-8000-000000000003',
+      westOfDateLine: '00000000-0000-4000-8000-000000000004',
+      outsideBounds: '00000000-0000-4000-8000-000000000005',
+      outsidePeriod: '00000000-0000-4000-8000-000000000006',
+      expired: '00000000-0000-4000-8000-000000000007',
+    };
     await database.db.insert(observations).values([
       {
+        id: ids.first,
         animalId: wolfId,
         clientId,
-        location: { longitude: 37.61, latitude: 55.75 },
-        observedAt: new Date(Date.now() - 60_000),
+        location: { longitude: 30, latitude: 50 },
+        observedAt: new Date(now - 60_000),
       },
       {
+        id: ids.second,
         animalId: tigerId,
         clientId,
         location: { longitude: 37.62, latitude: 55.76 },
-        observedAt: new Date(Date.now() - 120_000),
+        observedAt: new Date(now - 60_000),
       },
+      {
+        id: ids.eastOfDateLine,
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 179, latitude: 10 },
+        observedAt: new Date(now - 120_000),
+      },
+      {
+        id: ids.westOfDateLine,
+        animalId: tigerId,
+        clientId,
+        location: { longitude: -179, latitude: 10 },
+        observedAt: new Date(now - 120_000),
+      },
+      {
+        id: ids.outsideBounds,
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 41, latitude: 55 },
+        observedAt: new Date(now - 120_000),
+      },
+      {
+        id: ids.outsidePeriod,
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 35, latitude: 55 },
+        observedAt: new Date(now - 25 * 60 * 60 * 1000),
+      },
+      {
+        id: ids.expired,
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 35, latitude: 55 },
+        observedAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+      },
+    ]);
+    const voters = await database.db.insert(clients).values([
+      { tokenHash: 'd'.repeat(64) },
+      { tokenHash: 'e'.repeat(64) },
+    ]).returning({ id: clients.id });
+    if (!voters[0] || !voters[1]) throw new Error('Failed to create map voters');
+    await database.db.insert(votes).values([
+      { observationId: ids.first, clientId, value: 'confirm' },
+      { observationId: ids.first, clientId: voters[0].id, value: 'confirm' },
+      { observationId: ids.first, clientId: voters[1].id, value: 'reject' },
     ]);
     await database.db.update(animals).set({ isActive: false }).where(eq(animals.id, wolfId));
 
     const app = buildApp({ animalService, clientService, observationService });
     try {
-      const first = await app.inject({
+      const bounded = await app.inject({
         method: 'GET',
-        url: `/api/v1/observations?animalId=${wolfId}&animalId=${tigerId}&limit=1`,
+        url: `/api/v1/observations?animalIds=${wolfId},${tigerId}&period=24h&west=30&south=50&east=40&north=60`,
         headers: { authorization: `Bearer ${token}` },
       });
-      expect(first.statusCode).toBe(200);
-      const firstBody = first.json<{
-        data: Array<{ animal: { id: string; name: { ru: string; en: string } } }>;
-        meta: { nextCursor: string | null };
-      }>();
-      expect(firstBody.data).toHaveLength(1);
-      expect(firstBody.data[0]?.animal).toEqual({
-        id: wolfId,
-        name: { ru: 'Волк', en: 'Wolf' },
+      expect(bounded.statusCode).toBe(200);
+      expect(bounded.json()).toEqual({
+        items: [
+          {
+            id: ids.first,
+            animalId: wolfId,
+            location: { longitude: 30, latitude: 50 },
+            observedAt: new Date(now - 60_000).toISOString(),
+            votes: { confirm: 2, reject: 1 },
+            confirmationPercent: 67,
+          },
+          {
+            id: ids.second,
+            animalId: tigerId,
+            location: { longitude: 37.62, latitude: 55.76 },
+            observedAt: new Date(now - 60_000).toISOString(),
+            votes: { confirm: 0, reject: 0 },
+            confirmationPercent: null,
+          },
+        ],
+        truncated: false,
+        limit: 2000,
       });
-      expect(firstBody.meta.nextCursor).toEqual(expect.any(String));
 
-      const second = await app.inject({
+      const boundaryPoint = await app.inject({
         method: 'GET',
-        url: `/api/v1/observations?animalId=${wolfId}&animalId=${tigerId}&limit=1&cursor=${encodeURIComponent(firstBody.meta.nextCursor ?? '')}`,
+        url: `/api/v1/observations?animalIds=${wolfId}&period=24h&west=30&south=50&east=30&north=50`,
         headers: { authorization: `Bearer ${token}` },
       });
-      expect(second.statusCode).toBe(200);
-      expect(second.json()).toMatchObject({
-        data: [{ animal: { id: tigerId, name: { ru: 'Тигр', en: 'Tiger' } } }],
-        meta: { nextCursor: null },
+      expect(boundaryPoint.statusCode).toBe(200);
+      expect(boundaryPoint.json<{ items: Array<{ id: string }> }>().items.map((item) => item.id))
+        .toEqual([ids.first]);
+
+      const acrossDateLine = await app.inject({
+        method: 'GET',
+        url: `/api/v1/observations?animalIds=${wolfId},${tigerId}&period=24h&west=170&south=0&east=-170&north=20`,
+        headers: { authorization: `Bearer ${token}` },
       });
+      expect(acrossDateLine.statusCode).toBe(200);
+      expect(acrossDateLine.json<{ items: Array<{ id: string }> }>().items.map((item) => item.id))
+        .toEqual([ids.eastOfDateLine, ids.westOfDateLine]);
+
+      const unknownAnimal = await app.inject({
+        method: 'GET',
+        url: `/api/v1/observations?animalIds=${randomUUID()}&period=24h&west=-180&south=-90&east=180&north=90`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(unknownAnimal.statusCode).toBe(400);
+      expect(unknownAnimal.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('reports truncation only when more than 2000 map observations match', async () => {
+    const { clientId, token } = await seedAuthenticatedClient();
+    const wolfId = '423e53fb-01c1-521b-8b29-6cccf5268618';
+    const observedAt = new Date(Date.now() - 60_000);
+    await database.db.insert(observations).values(Array.from({ length: 2000 }, () => ({
+      animalId: wolfId,
+      clientId,
+      location: { longitude: 37.6, latitude: 55.7 },
+      observedAt,
+    })));
+
+    const app = buildApp({ animalService, clientService, observationService });
+    const request = {
+      method: 'GET' as const,
+      url: `/api/v1/observations?animalIds=${wolfId}&period=24h&west=-180&south=-90&east=180&north=90`,
+      headers: { authorization: `Bearer ${token}` },
+    };
+    try {
+      const exactLimit = await app.inject(request);
+      expect(exactLimit.statusCode).toBe(200);
+      const exactLimitBody = exactLimit.json<{ items: unknown[]; truncated: boolean; limit: number }>();
+      expect(exactLimitBody).toMatchObject({ truncated: false, limit: 2000 });
+      expect(exactLimitBody.items).toHaveLength(2000);
+
+      await database.db.insert(observations).values({
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 37.6, latitude: 55.7 },
+        observedAt,
+      });
+      const aboveLimit = await app.inject(request);
+      expect(aboveLimit.statusCode).toBe(200);
+      const aboveLimitBody = aboveLimit.json<{ items: unknown[]; truncated: boolean; limit: number }>();
+      expect(aboveLimitBody).toMatchObject({ truncated: true, limit: 2000 });
+      expect(aboveLimitBody.items).toHaveLength(2000);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('applies all map periods and hides observations older than 30 days before cleanup', async () => {
+    const { clientId, token } = await seedAuthenticatedClient();
+    const wolfId = '423e53fb-01c1-521b-8b29-6cccf5268618';
+    const now = Date.now();
+    await database.db.insert(observations).values([
+      {
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 37.6, latitude: 55.7 },
+        observedAt: new Date(now - 30 * 60 * 1000),
+      },
+      {
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 37.6, latitude: 55.7 },
+        observedAt: new Date(now - 2 * 60 * 60 * 1000),
+      },
+      {
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 37.6, latitude: 55.7 },
+        observedAt: new Date(now - 2 * 24 * 60 * 60 * 1000),
+      },
+      {
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 37.6, latitude: 55.7 },
+        observedAt: new Date(now - 8 * 24 * 60 * 60 * 1000),
+      },
+      {
+        animalId: wolfId,
+        clientId,
+        location: { longitude: 37.6, latitude: 55.7 },
+        observedAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+      },
+    ]);
+
+    const app = buildApp({ animalService, clientService, observationService });
+    try {
+      for (const [period, expectedCount] of [
+        ['1h', 1],
+        ['24h', 2],
+        ['7d', 3],
+        ['30d', 4],
+      ] as const) {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/api/v1/observations?animalIds=${wolfId}&period=${period}&west=-180&south=-90&east=180&north=90`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json<{ items: unknown[] }>().items).toHaveLength(expectedCount);
+      }
     } finally {
       await app.close();
     }

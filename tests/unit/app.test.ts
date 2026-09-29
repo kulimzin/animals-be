@@ -28,9 +28,21 @@ const observation = {
 };
 const observationService: ObservationService = {
   create: () => Promise.resolve(observation),
-  list: () => Promise.resolve({ observations: [observation], nextCursor: null }),
+  list: () => Promise.resolve({
+    observations: [{
+      id: observation.id,
+      animalId: observation.animalId,
+      location: observation.location,
+      observedAt: observation.observedAt,
+      confirmVotes: 1,
+      rejectVotes: 7,
+    }],
+    truncated: false,
+    limit: 2000,
+  }),
 };
 const authorization = { authorization: `Bearer ${'a'.repeat(43)}` };
+const mapQuery = `animalIds=${observation.animalId}&period=24h&west=30&south=50&east=40&north=60`;
 const app = buildApp({ animalService, clientService, observationService });
 afterAll(async () => { await app.close(); });
 
@@ -49,7 +61,11 @@ describe('application foundation', () => {
     const document = response.json<{
       openapi: string;
       paths: Record<string, {
-        get?: { operationId?: string; security?: Array<Record<string, unknown>> };
+        get?: {
+          operationId?: string;
+          parameters?: Array<{ name: string; in: string; required?: boolean }>;
+          security?: Array<Record<string, unknown>>;
+        };
         post?: {
           operationId?: string;
           responses?: Record<string, unknown>;
@@ -79,6 +95,16 @@ describe('application foundation', () => {
     expect(document.paths['/api/v1/config']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.post?.security).toEqual([{ bearerAuth: [] }]);
+    const mapParameters = document.paths['/api/v1/observations']?.get?.parameters;
+    expect(mapParameters?.map((parameter) => parameter.name))
+      .toEqual(['animalIds', 'period', 'west', 'south', 'east', 'north']);
+    expect(mapParameters).toMatchObject(
+      ['animalIds', 'period', 'west', 'south', 'east', 'north'].map((name) => ({
+        name,
+        in: 'query',
+        required: true,
+      })),
+    );
   });
 
   it('returns public application configuration to an authenticated client', async () => {
@@ -96,31 +122,29 @@ describe('application foundation', () => {
     });
   });
 
-  it('returns the authenticated observation list in the common envelope', async () => {
+  it('returns map observations with vote aggregates and response metadata', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/api/v1/observations?limit=100',
+      url: `/api/v1/observations?${mapQuery}`,
       headers: authorization,
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      data: [{
+      items: [{
         id: observation.id,
-        animal: {
-          id: observation.animalId,
-          name: { ru: 'Волк', en: 'Wolf' },
-        },
+        animalId: observation.animalId,
         location: observation.location,
         observedAt: '2026-09-29T07:15:00.000Z',
-        locationLabel: 'Парк Горького',
-        note: null,
+        votes: { confirm: 1, reject: 7 },
+        confirmationPercent: 13,
       }],
-      meta: { nextCursor: null },
+      truncated: false,
+      limit: 2000,
     });
   });
 
-  it('validates observation headers, body and list limits', async () => {
+  it('validates observation headers, body and required map filters', async () => {
     const invalidCreate = await app.inject({
       method: 'POST',
       url: '/api/v1/observations',
@@ -137,13 +161,24 @@ describe('application foundation', () => {
     expect(invalidCreate.statusCode).toBe(400);
     expect(invalidCreate.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
 
-    const invalidList = await app.inject({
-      method: 'GET',
-      url: '/api/v1/observations?limit=201',
-      headers: authorization,
-    });
-    expect(invalidList.statusCode).toBe(400);
-    expect(invalidList.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+    const invalidQueries = [
+      '',
+      `animalIds=${observation.animalId},${observation.animalId}&period=24h&west=30&south=50&east=40&north=60`,
+      `animalIds=${Array.from({ length: 6 }, () => observation.animalId).join(',')}&period=24h&west=30&south=50&east=40&north=60`,
+      `animalIds=${observation.animalId}&period=2h&west=30&south=50&east=40&north=60`,
+      `animalIds=${observation.animalId}&period=24h&west=&south=50&east=40&north=60`,
+      `animalIds=${observation.animalId}&period=24h&west=30&south=60&east=40&north=50`,
+      `${mapQuery}&limit=100`,
+    ];
+    for (const query of invalidQueries) {
+      const invalidList = await app.inject({
+        method: 'GET',
+        url: `/api/v1/observations?${query}`,
+        headers: authorization,
+      });
+      expect(invalidList.statusCode).toBe(400);
+      expect(invalidList.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+    }
   });
 
   it('returns both localized animal names and a stable icon slug', async () => {

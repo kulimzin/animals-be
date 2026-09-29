@@ -4,8 +4,7 @@ import { createPublicConfig } from '../config/public-config.js';
 import type { PublicConfig } from '../config/public-config.js';
 import type {
   CreateObservationInput,
-  ObservationCursor,
-  ObservationRecord,
+  ListObservationsInput,
   ObservationRepository,
 } from './observation-repository.js';
 
@@ -25,35 +24,6 @@ function hashObservation(draft: ObservationDraft) {
     locationLabel: draft.locationLabel,
     note: draft.note,
   })).digest('hex');
-}
-
-function encodeCursor(observation: ObservationRecord) {
-  return Buffer.from(JSON.stringify({
-    observedAt: observation.observedAt.toISOString(),
-    id: observation.id,
-  })).toString('base64url');
-}
-
-function decodeCursor(value: string): ObservationCursor {
-  try {
-    const decoded: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
-    if (typeof decoded !== 'object' || decoded === null
-      || !('observedAt' in decoded) || typeof decoded.observedAt !== 'string'
-      || !('id' in decoded) || typeof decoded.id !== 'string'
-      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded.id)) {
-      throw new Error('Invalid cursor payload');
-    }
-    const observedAt = new Date(decoded.observedAt);
-    if (Number.isNaN(observedAt.getTime()) || observedAt.toISOString() !== decoded.observedAt) {
-      throw new Error('Invalid cursor timestamp');
-    }
-    return { observedAt, id: decoded.id };
-  } catch {
-    throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', [{
-      path: '/query/cursor',
-      message: 'Invalid cursor',
-    }]);
-  }
 }
 
 export function createObservationService(
@@ -86,17 +56,18 @@ export function createObservationService(
       return result.observation;
     },
 
-    async list(animalIds: string[], limit: number, cursorValue?: string) {
-      const cursor = cursorValue === undefined ? undefined : decodeCursor(cursorValue);
-      const result = await repository.list({
-        animalIds: [...new Set(animalIds)],
-        limit,
-        ...(cursor ? { cursor } : {}),
-      });
-      const last = result.observations.at(-1);
+    async list(input: ListObservationsInput) {
+      const result = await repository.list(input);
+      if (result.status === 'animals-not-found') {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', [{
+          path: '/query/animalIds',
+          message: 'One or more animals do not exist',
+        }]);
+      }
       return {
         observations: result.observations,
-        nextCursor: result.hasMore && last ? encodeCursor(last) : null,
+        truncated: result.hasMore,
+        limit: input.limit,
       };
     },
   };

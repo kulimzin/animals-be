@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { errorResponseSchema, successResponseSchema } from '../../shared/http/schemas.js';
-import { NOTE_MAX_LENGTH } from '../config/public-config.js';
+import { MAP_RESULT_LIMIT, NOTE_MAX_LENGTH } from '../config/public-config.js';
+import type { MapObservationRecord } from './observation-repository.js';
 import type { ObservationRecord } from './observation-repository.js';
 import type { ObservationService } from './observation-service.js';
 
@@ -43,15 +44,56 @@ const createObservationHeadersSchema = z.object({
   'idempotency-key': z.uuid(),
 });
 
+const animalIdsSchema = z.string().min(1).transform((value, context) => {
+  const animalIds = value.split(',').map((animalId) => animalId.trim());
+  if (animalIds.length < 1 || animalIds.length > 5) {
+    context.addIssue({ code: 'custom', message: 'Must contain between 1 and 5 animal ids' });
+    return z.NEVER;
+  }
+  if (animalIds.some((animalId) => !z.uuid().safeParse(animalId).success)) {
+    context.addIssue({ code: 'custom', message: 'Must contain valid UUIDs separated by commas' });
+    return z.NEVER;
+  }
+  if (new Set(animalIds).size !== animalIds.length) {
+    context.addIssue({ code: 'custom', message: 'Animal ids must be unique' });
+    return z.NEVER;
+  }
+  return animalIds;
+});
+
+const coordinateQuerySchema = (minimum: number, maximum: number) => z.preprocess(
+  (value) => typeof value === 'string' && value.trim().length > 0 ? Number(value) : value,
+  z.number().finite().min(minimum).max(maximum),
+);
+
 const listObservationsQuerySchema = z.object({
-  animalId: z.union([z.uuid(), z.array(z.uuid())]).optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(100),
-  cursor: z.string().min(1).optional(),
-}).strict();
+  animalIds: animalIdsSchema,
+  period: z.enum(['1h', '24h', '7d', '30d']),
+  west: coordinateQuerySchema(-180, 180),
+  south: coordinateQuerySchema(-90, 90),
+  east: coordinateQuerySchema(-180, 180),
+  north: coordinateQuerySchema(-90, 90),
+}).strict().refine((query) => query.south <= query.north, {
+  path: ['south'],
+  message: 'South must not be greater than north',
+});
 
 const createObservationResponseSchema = successResponseSchema(observationSchema);
-const listObservationsResponseSchema = successResponseSchema(z.array(observationSchema)).extend({
-  meta: z.object({ nextCursor: z.string().nullable() }),
+const mapObservationSchema = z.object({
+  id: z.uuid(),
+  animalId: z.uuid(),
+  location: locationSchema,
+  observedAt: z.iso.datetime(),
+  votes: z.object({
+    confirm: z.number().int().nonnegative(),
+    reject: z.number().int().nonnegative(),
+  }),
+  confirmationPercent: z.number().int().min(0).max(100).nullable(),
+});
+const listObservationsResponseSchema = z.object({
+  items: z.array(mapObservationSchema),
+  truncated: z.boolean(),
+  limit: z.literal(MAP_RESULT_LIMIT),
 });
 
 function toObservationDto(observation: ObservationRecord) {
@@ -68,6 +110,23 @@ function toObservationDto(observation: ObservationRecord) {
     observedAt: observation.observedAt.toISOString(),
     locationLabel: observation.locationLabel,
     note: observation.note,
+  };
+}
+
+function toMapObservationDto(observation: MapObservationRecord) {
+  const totalVotes = observation.confirmVotes + observation.rejectVotes;
+  return {
+    id: observation.id,
+    animalId: observation.animalId,
+    location: observation.location,
+    observedAt: observation.observedAt.toISOString(),
+    votes: {
+      confirm: observation.confirmVotes,
+      reject: observation.rejectVotes,
+    },
+    confirmationPercent: totalVotes === 0
+      ? null
+      : Math.floor((observation.confirmVotes * 100) / totalVotes + 0.5),
   };
 }
 
@@ -118,17 +177,15 @@ export function registerObservationRoutes(
       },
     },
   }, async (request) => {
-    const animalIds = request.query.animalId === undefined
-      ? []
-      : Array.isArray(request.query.animalId) ? request.query.animalId : [request.query.animalId];
-    const result = await observationService.list(
-      animalIds,
-      request.query.limit,
-      request.query.cursor,
-    );
-    return {
-      data: result.observations.map(toObservationDto),
-      meta: { nextCursor: result.nextCursor },
+    const result = await observationService.list({
+      ...request.query,
+      limit: MAP_RESULT_LIMIT,
+    });
+    const response: z.infer<typeof listObservationsResponseSchema> = {
+      items: result.observations.map(toMapObservationDto),
+      truncated: result.truncated,
+      limit: MAP_RESULT_LIMIT,
     };
+    return response;
   });
 }

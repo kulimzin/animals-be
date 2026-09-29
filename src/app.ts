@@ -111,7 +111,7 @@ export function buildApp({
   void app.register((routesApp, _options, done) => {
     registerClientRoutes(routesApp, clientService);
     void routesApp.register((protectedApp, _protectedOptions, protectedDone) => {
-      protectedApp.addHook('preHandler', createClientAuthenticationHook(clientService));
+      protectedApp.addHook('onRequest', createClientAuthenticationHook(clientService));
       registerConfigRoutes(protectedApp, publicConfig);
       registerAnimalRoutes(protectedApp, animalService);
       registerObservationRoutes(protectedApp, observationService);

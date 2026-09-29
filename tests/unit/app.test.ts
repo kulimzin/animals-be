@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
+import { ApiError } from '../../src/shared/http/api-error.js';
 import type { AnimalService } from '../../src/modules/animals/animal-service.js';
 import type { ClientService } from '../../src/modules/clients/client-service.js';
 import type { ObservationService } from '../../src/modules/observations/observation-service.js';
@@ -119,6 +120,12 @@ describe('application foundation', () => {
         'Cache-Control': { schema: { enum: ['private, no-store'] } },
       },
     });
+    expect(document.paths['/api/v1/observations']?.post?.responses?.['429']).toMatchObject({
+      headers: {
+        'Cache-Control': { schema: { enum: ['private, no-store'] } },
+        'Retry-After': { schema: { type: 'integer', minimum: 1 } },
+      },
+    });
     expect(document.paths['/api/v1/observations/{id}/vote']?.put?.responses?.['200'])
       .toMatchObject({
         headers: {
@@ -158,6 +165,55 @@ describe('application foundation', () => {
         userVote: 'reject',
       },
     });
+  });
+
+  it('returns publication retry metadata and Retry-After', async () => {
+    const rateLimitedApp = buildApp({
+      animalService,
+      clientService,
+      observationService: {
+        ...observationService,
+        create: () => Promise.reject(new ApiError(
+          429,
+          'RATE_LIMITED',
+          'Observation publication rate limit exceeded',
+          undefined,
+          {
+            retryAfterSeconds: 30,
+            availableAt: new Date('2026-09-29T07:16:00.000Z'),
+          },
+        )),
+      },
+    });
+    try {
+      const response = await rateLimitedApp.inject({
+        method: 'POST',
+        url: '/api/v1/observations',
+        headers: {
+          ...authorization,
+          'idempotency-key': 'b2e3bb2e-7c42-4441-8e4a-cb121a479f53',
+        },
+        payload: {
+          animalId: observation.animalId,
+          location: observation.location,
+          observedAt: '2026-09-29T07:15:00.000Z',
+        },
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(response.headers['cache-control']).toBe('private, no-store');
+      expect(response.headers['retry-after']).toBe('30');
+      expect(response.json()).toEqual({
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Observation publication rate limit exceeded',
+          retryAfterSeconds: 30,
+          availableAt: '2026-09-29T07:16:00.000Z',
+        },
+      });
+    } finally {
+      await rateLimitedApp.close();
+    }
   });
 
   it('sets a vote and returns personalized details without allowing shared caching', async () => {

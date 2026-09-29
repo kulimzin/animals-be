@@ -162,10 +162,12 @@ export function registerObservationRoutes(
         401: errorResponseSchema,
         409: errorResponseSchema,
         422: errorResponseSchema,
+        429: errorResponseSchema,
       },
     },
   }, async (request, reply) => {
     if (!request.client) throw new Error('Authenticated client is missing');
+    reply.header('Cache-Control', 'private, no-store');
     const observation = await observationService.create(request.client.id, {
       idempotencyKey: request.headers['idempotency-key'],
       animalId: request.body.animalId,
@@ -174,8 +176,7 @@ export function registerObservationRoutes(
       locationLabel: request.body.locationLabel ?? null,
       note: request.body.note ?? null,
     });
-    return reply.header('Cache-Control', 'private, no-store')
-      .status(201)
+    return reply.status(201)
       .send({ data: toObservationDetailsDto(observation) });
   });
 

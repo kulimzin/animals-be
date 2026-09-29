@@ -9,6 +9,7 @@ export const API_ERROR_CODES = [
   'INTERNAL_ERROR',
   'NOT_FOUND',
   'OBSERVATION_NOT_FOUND',
+  'RATE_LIMITED',
   'REQUEST_INVALID',
   'VALIDATION_ERROR',
 ] as const;
@@ -20,12 +21,18 @@ export type ApiErrorDetail = {
   message: string;
 };
 
+export type ApiErrorRateLimit = {
+  retryAfterSeconds: number;
+  availableAt: Date;
+};
+
 export class ApiError extends Error {
   constructor(
     readonly statusCode: number,
     readonly code: ApiErrorCode,
     message: string,
     readonly details?: ApiErrorDetail[],
+    readonly rateLimit?: ApiErrorRateLimit,
   ) {
     super(message);
   }

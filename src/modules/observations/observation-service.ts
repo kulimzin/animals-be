@@ -56,6 +56,18 @@ export function createObservationService(
           message: 'Observation time must be within the last 30 days and not in the future',
         }]);
       }
+      if (result.status === 'rate-limited') {
+        throw new ApiError(
+          429,
+          'RATE_LIMITED',
+          'Observation publication rate limit exceeded',
+          undefined,
+          {
+            retryAfterSeconds: result.retryAfterSeconds,
+            availableAt: result.availableAt,
+          },
+        );
+      }
       return result.observation;
     },
 

@@ -11,6 +11,7 @@ import {
   clients,
   observationIdempotency,
   observations,
+  publicationEvents,
   votes,
 } from '../../src/infrastructure/database/schema.js';
 import { createPostgresAnimalRepository } from '../../src/modules/animals/animal-repository.js';
@@ -464,6 +465,201 @@ describe('database migrations and constraints', () => {
     }
   });
 
+  it('enforces every adaptive publication interval at its time boundary', async () => {
+    const { clientId, token } = await seedAuthenticatedClient();
+    const app = buildApp({ animalService, clientService, observationService });
+    const publish = () => app.inject({
+      method: 'POST',
+      url: '/api/v1/observations',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': randomUUID(),
+      },
+      payload: {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        location: { longitude: 37.6176, latitude: 55.7558 },
+        observedAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    });
+    const resetPublications = async () => {
+      await database.db.delete(observationIdempotency);
+      await database.db.delete(observations);
+      await database.db.delete(publicationEvents);
+    };
+    const seedPublications = async (amount: number, latestAt: Date) => {
+      await database.db.insert(publicationEvents).values(Array.from({ length: amount }, (_, index) => ({
+        clientId,
+        publishedAt: new Date(latestAt.getTime() - index * 1000),
+      })));
+    };
+
+    try {
+      const first = await publish();
+      expect(first.statusCode).toBe(201);
+      expect(await database.db.select({ value: count() }).from(publicationEvents))
+        .toEqual([{ value: 1 }]);
+
+      for (const { recentCount, pauseSeconds } of [
+        { recentCount: 1, pauseSeconds: 30 },
+        { recentCount: 2, pauseSeconds: 60 },
+        { recentCount: 3, pauseSeconds: 180 },
+        { recentCount: 4, pauseSeconds: 180 },
+        { recentCount: 5, pauseSeconds: 600 },
+        { recentCount: 6, pauseSeconds: 600 },
+      ]) {
+        await resetPublications();
+        const blockedLatestAt = new Date(Date.now() - 500);
+        await seedPublications(recentCount, blockedLatestAt);
+
+        const blocked = await publish();
+        expect(blocked.statusCode).toBe(429);
+        expect(blocked.headers['cache-control']).toBe('private, no-store');
+        const blockedBody = blocked.json<{
+          error: { code: string; retryAfterSeconds: number; availableAt: string };
+        }>();
+        expect(blockedBody.error).toEqual({
+          code: 'RATE_LIMITED',
+          message: 'Observation publication rate limit exceeded',
+          retryAfterSeconds: blockedBody.error.retryAfterSeconds,
+          availableAt: new Date(
+            blockedLatestAt.getTime() + pauseSeconds * 1000,
+          ).toISOString(),
+        });
+        expect(blockedBody.error.retryAfterSeconds).toBeGreaterThanOrEqual(pauseSeconds - 2);
+        expect(blockedBody.error.retryAfterSeconds).toBeLessThanOrEqual(pauseSeconds);
+        expect(blocked.headers['retry-after']).toBe(String(blockedBody.error.retryAfterSeconds));
+        expect(await database.db.select({ value: count() }).from(publicationEvents))
+          .toEqual([{ value: recentCount }]);
+        expect(await database.db.select({ value: count() }).from(observations))
+          .toEqual([{ value: 0 }]);
+
+        await resetPublications();
+        await seedPublications(
+          recentCount,
+          new Date(Date.now() - pauseSeconds * 1000 - 1000),
+        );
+        const allowed = await publish();
+        expect(allowed.statusCode).toBe(201);
+        expect(await database.db.select({ value: count() }).from(publicationEvents))
+          .toEqual([{ value: recentCount + 1 }]);
+        expect(await database.db.select({ value: count() }).from(observations))
+          .toEqual([{ value: 1 }]);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not charge idempotent replays or extend a rejected publication pause', async () => {
+    const { token } = await seedAuthenticatedClient();
+    const app = buildApp({ animalService, clientService, observationService });
+    const request = {
+      method: 'POST' as const,
+      url: '/api/v1/observations',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': randomUUID(),
+      },
+      payload: {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        location: { longitude: 37.6176, latitude: 55.7558 },
+        observedAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    };
+    try {
+      const created = await app.inject(request);
+      const replayed = await app.inject(request);
+      expect([created.statusCode, replayed.statusCode]).toEqual([201, 201]);
+      expect(replayed.json<{ data: { id: string } }>().data.id)
+        .toBe(created.json<{ data: { id: string } }>().data.id);
+      expect(await database.db.select({ value: count() }).from(publicationEvents))
+        .toEqual([{ value: 1 }]);
+
+      const newRequest = {
+        ...request,
+        headers: { ...request.headers, 'idempotency-key': randomUUID() },
+      };
+      const firstRejection = await app.inject(newRequest);
+      const secondRejection = await app.inject({
+        ...newRequest,
+        headers: { ...newRequest.headers, 'idempotency-key': randomUUID() },
+      });
+      expect([firstRejection.statusCode, secondRejection.statusCode]).toEqual([429, 429]);
+      expect(secondRejection.json<{ error: { availableAt: string } }>().error.availableAt)
+        .toBe(firstRejection.json<{ error: { availableAt: string } }>().error.availableAt);
+      expect(await database.db.select({ value: count() }).from(publicationEvents))
+        .toEqual([{ value: 1 }]);
+      expect(await database.db.select({ value: count() }).from(observations))
+        .toEqual([{ value: 1 }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('allows only one of two parallel new publications for the same client', async () => {
+    const { token } = await seedAuthenticatedClient();
+    const app = buildApp({ animalService, clientService, observationService });
+    const request = (idempotencyKey: string) => ({
+      method: 'POST' as const,
+      url: '/api/v1/observations',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': idempotencyKey,
+      },
+      payload: {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        location: { longitude: 37.6176, latitude: 55.7558 },
+        observedAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    });
+    try {
+      const responses = await Promise.all([
+        app.inject(request(randomUUID())),
+        app.inject(request(randomUUID())),
+      ]);
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([201, 429]);
+      expect(await database.db.select({ value: count() }).from(publicationEvents))
+        .toEqual([{ value: 1 }]);
+      expect(await database.db.select({ value: count() }).from(observations))
+        .toEqual([{ value: 1 }]);
+      expect(await database.db.select({ value: count() }).from(observationIdempotency))
+        .toEqual([{ value: 1 }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('removes publication events older than 24 hours during a new publication', async () => {
+    const { clientId, token } = await seedAuthenticatedClient();
+    const { clientId: staleClientId } = await seedAuthenticatedClient('j'.repeat(43));
+    await database.db.insert(publicationEvents).values({
+      clientId: staleClientId,
+      publishedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+    });
+    const app = buildApp({ animalService, clientService, observationService });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/observations',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'idempotency-key': randomUUID(),
+        },
+        payload: {
+          animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+          location: { longitude: 37.6176, latitude: 55.7558 },
+          observedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(await database.db.select({ clientId: publicationEvents.clientId })
+        .from(publicationEvents)).toEqual([{ clientId }]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('returns personalized details and hides unknown, deleted and expired observations uniformly', async () => {
     const { clientId, token } = await seedAuthenticatedClient();
     const { clientId: otherClientId, token: otherToken } = await seedAuthenticatedClient('g'.repeat(43));
@@ -692,7 +888,7 @@ describe('database migrations and constraints', () => {
   });
 
   it('rejects new descriptions when disabled but allows a successful idempotent replay', async () => {
-    const { token } = await seedAuthenticatedClient();
+    const { clientId, token } = await seedAuthenticatedClient();
     const idempotencyKey = randomUUID();
     const request = {
       method: 'POST' as const,
@@ -749,6 +945,9 @@ describe('database migrations and constraints', () => {
       expect(rejected.statusCode).toBe(422);
       expect(rejected.json()).toMatchObject({ error: { code: 'DESCRIPTION_DISABLED' } });
 
+      await database.db.update(publicationEvents).set({
+        publishedAt: new Date(Date.now() - 31_000),
+      }).where(eq(publicationEvents.clientId, clientId));
       const withoutDescription = await disabledApp.inject({
         ...request,
         headers: { ...request.headers, 'idempotency-key': randomUUID() },

@@ -58,6 +58,22 @@ const openApiTransform: SwaggerTransformObject = (document) => {
       },
     };
   }
+
+  for (const [path, method, status] of [
+    ['/api/v1/observations', 'post', '201'],
+    ['/api/v1/observations/{id}', 'get', '200'],
+  ] as const) {
+    const response = openApi.paths?.[path]?.[method]?.responses?.[status];
+    if (response && !('$ref' in response)) {
+      response.headers = {
+        ...response.headers,
+        'Cache-Control': {
+          description: 'Prevents shared caching of the personalized userVote value',
+          schema: { type: 'string', enum: ['private, no-store'] },
+        },
+      };
+    }
+  }
   return openApi;
 };
 

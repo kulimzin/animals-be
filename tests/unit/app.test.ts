@@ -19,15 +19,17 @@ const clientService: ClientService = {
 const observation = {
   id: '6ee21c62-18a9-4e82-a487-adcf49ce747d',
   animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
-  animalNameRu: 'Волк',
-  animalNameEn: 'Wolf',
   location: { longitude: 37.6176, latitude: 55.7558 },
   observedAt: new Date('2026-09-29T07:15:00.000Z'),
   locationLabel: 'Парк Горького',
   note: null,
+  confirmVotes: 1,
+  rejectVotes: 7,
+  userVote: 'reject' as const,
 };
 const observationService: ObservationService = {
   create: () => Promise.resolve(observation),
+  getDetails: () => Promise.resolve(observation),
   list: () => Promise.resolve({
     observations: [{
       id: observation.id,
@@ -64,6 +66,7 @@ describe('application foundation', () => {
         get?: {
           operationId?: string;
           parameters?: Array<{ name: string; in: string; required?: boolean }>;
+          responses?: Record<string, unknown>;
           security?: Array<Record<string, unknown>>;
         };
         post?: {
@@ -83,6 +86,7 @@ describe('application foundation', () => {
           get: { operationId: 'listObservations' },
           post: { operationId: 'createObservation' },
         },
+        '/api/v1/observations/{id}': { get: { operationId: 'getObservation' } },
       },
     });
     expect(document.paths['/api/v1/clients']?.post?.responses?.['429']).toMatchObject({
@@ -95,6 +99,17 @@ describe('application foundation', () => {
     expect(document.paths['/api/v1/config']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.post?.security).toEqual([{ bearerAuth: [] }]);
+    expect(document.paths['/api/v1/observations/{id}']?.get?.security).toEqual([{ bearerAuth: [] }]);
+    expect(document.paths['/api/v1/observations/{id}']?.get?.responses?.['200']).toMatchObject({
+      headers: {
+        'Cache-Control': { schema: { enum: ['private, no-store'] } },
+      },
+    });
+    expect(document.paths['/api/v1/observations']?.post?.responses?.['201']).toMatchObject({
+      headers: {
+        'Cache-Control': { schema: { enum: ['private, no-store'] } },
+      },
+    });
     const mapParameters = document.paths['/api/v1/observations']?.get?.parameters;
     expect(mapParameters?.map((parameter) => parameter.name))
       .toEqual(['animalIds', 'period', 'west', 'south', 'east', 'north']);
@@ -105,6 +120,29 @@ describe('application foundation', () => {
         required: true,
       })),
     );
+  });
+
+  it('returns personalized observation details without allowing shared caching', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/observations/${observation.id}`,
+      headers: authorization,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.json()).toEqual({
+      data: {
+        id: observation.id,
+        animalId: observation.animalId,
+        location: { ...observation.location, label: 'Парк Горького' },
+        observedAt: '2026-09-29T07:15:00.000Z',
+        note: null,
+        votes: { confirm: 1, reject: 7 },
+        confirmationPercent: 13,
+        userVote: 'reject',
+      },
+    });
   });
 
   it('returns public application configuration to an authenticated client', async () => {
@@ -215,7 +253,12 @@ describe('application foundation', () => {
     const issued = await app.inject({ method: 'POST', url: '/api/v1/clients' });
     expect(issued.statusCode).toBe(201);
 
-    for (const url of ['/api/v1/animals', '/api/v1/config', '/api/v1/observations']) {
+    for (const url of [
+      '/api/v1/animals',
+      '/api/v1/config',
+      '/api/v1/observations',
+      `/api/v1/observations/${observation.id}`,
+    ]) {
       const missing = await app.inject({ method: 'GET', url });
       expect(missing.statusCode).toBe(401);
       expect(missing.headers['www-authenticate']).toBe('Bearer');

@@ -44,6 +44,9 @@ export function createObservationService(
       if (result.status === 'idempotency-conflict') {
         throw new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'Idempotency key was already used for another request');
       }
+      if (result.status === 'idempotency-result-gone') {
+        throw new ApiError(409, 'IDEMPOTENCY_RESULT_GONE', 'The idempotent observation is no longer available');
+      }
       if (result.status === 'description-disabled') {
         throw new ApiError(422, 'DESCRIPTION_DISABLED', 'Observation descriptions are disabled');
       }
@@ -54,6 +57,14 @@ export function createObservationService(
         }]);
       }
       return result.observation;
+    },
+
+    async getDetails(id: string, clientId: string) {
+      const observation = await repository.findDetails(id, clientId);
+      if (!observation) {
+        throw new ApiError(404, 'OBSERVATION_NOT_FOUND', 'Observation not found');
+      }
+      return observation;
     },
 
     async list(input: ListObservationsInput) {

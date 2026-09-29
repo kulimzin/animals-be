@@ -45,6 +45,7 @@ function createRepository(overrides: Partial<ObservationRepository> = {}): Obser
     create: () => Promise.resolve({ status: 'created', observation }),
     findDetails: () => Promise.resolve(observation),
     list: () => Promise.resolve({ status: 'ok', observations: [], hasMore: false }),
+    vote: () => Promise.resolve(observation),
     ...overrides,
   };
 }
@@ -110,6 +111,38 @@ describe('observation service', () => {
       statusCode: 404,
       code: 'OBSERVATION_NOT_FOUND',
     });
+  });
+
+  it.each(['confirm', 'reject', null] as const)(
+    'sets the requested vote state and returns personalized details for %s',
+    async (value) => {
+      const calls: Array<{
+        id: string;
+        clientId: string;
+        value: 'confirm' | 'reject' | null;
+      }> = [];
+      const service = createObservationService(createRepository({
+        vote: (id, clientId, requestedValue) => {
+          calls.push({ id, clientId, value: requestedValue });
+          return Promise.resolve(observation);
+        },
+      }));
+
+      await expect(service.vote(observation.id, 'client-id', value)).resolves.toBe(observation);
+      expect(calls).toEqual([{ id: observation.id, clientId: 'client-id', value }]);
+    },
+  );
+
+  it('uses the observation not-found error when voting is unavailable', async () => {
+    const service = createObservationService(createRepository({
+      vote: () => Promise.resolve(null),
+    }));
+
+    await expect(service.vote(observation.id, 'client-id', 'confirm'))
+      .rejects.toMatchObject<ApiError>({
+        statusCode: 404,
+        code: 'OBSERVATION_NOT_FOUND',
+      });
   });
 
   it('passes the disabled descriptions setting to the transactional repository', async () => {

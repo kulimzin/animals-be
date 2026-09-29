@@ -67,6 +67,18 @@ export function createObservationService(
       return observation;
     },
 
+    async vote(
+      id: string,
+      clientId: string,
+      value: 'confirm' | 'reject' | null,
+    ) {
+      const observation = await repository.vote(id, clientId, value);
+      if (!observation) {
+        throw new ApiError(404, 'OBSERVATION_NOT_FOUND', 'Observation not found');
+      }
+      return observation;
+    },
+
     async list(input: ListObservationsInput) {
       const result = await repository.list(input);
       if (result.status === 'animals-not-found') {

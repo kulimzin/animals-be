@@ -30,6 +30,7 @@ const observation = {
 const observationService: ObservationService = {
   create: () => Promise.resolve(observation),
   getDetails: () => Promise.resolve(observation),
+  vote: (_id, _clientId, value) => Promise.resolve({ ...observation, userVote: value }),
   list: () => Promise.resolve({
     observations: [{
       id: observation.id,
@@ -74,6 +75,11 @@ describe('application foundation', () => {
           responses?: Record<string, unknown>;
           security?: Array<Record<string, unknown>>;
         };
+        put?: {
+          operationId?: string;
+          responses?: Record<string, unknown>;
+          security?: Array<Record<string, unknown>>;
+        };
       }>;
     }>();
     expect(document).toMatchObject({
@@ -87,6 +93,7 @@ describe('application foundation', () => {
           post: { operationId: 'createObservation' },
         },
         '/api/v1/observations/{id}': { get: { operationId: 'getObservation' } },
+        '/api/v1/observations/{id}/vote': { put: { operationId: 'voteObservation' } },
       },
     });
     expect(document.paths['/api/v1/clients']?.post?.responses?.['429']).toMatchObject({
@@ -100,6 +107,8 @@ describe('application foundation', () => {
     expect(document.paths['/api/v1/observations']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.post?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations/{id}']?.get?.security).toEqual([{ bearerAuth: [] }]);
+    expect(document.paths['/api/v1/observations/{id}/vote']?.put?.security)
+      .toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations/{id}']?.get?.responses?.['200']).toMatchObject({
       headers: {
         'Cache-Control': { schema: { enum: ['private, no-store'] } },
@@ -110,6 +119,12 @@ describe('application foundation', () => {
         'Cache-Control': { schema: { enum: ['private, no-store'] } },
       },
     });
+    expect(document.paths['/api/v1/observations/{id}/vote']?.put?.responses?.['200'])
+      .toMatchObject({
+        headers: {
+          'Cache-Control': { schema: { enum: ['private, no-store'] } },
+        },
+      });
     const mapParameters = document.paths['/api/v1/observations']?.get?.parameters;
     expect(mapParameters?.map((parameter) => parameter.name))
       .toEqual(['animalIds', 'period', 'west', 'south', 'east', 'north']);
@@ -141,6 +156,25 @@ describe('application foundation', () => {
         votes: { confirm: 1, reject: 7 },
         confirmationPercent: 13,
         userVote: 'reject',
+      },
+    });
+  });
+
+  it('sets a vote and returns personalized details without allowing shared caching', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/observations/${observation.id}/vote`,
+      headers: authorization,
+      payload: { value: 'confirm' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.json()).toMatchObject({
+      data: {
+        id: observation.id,
+        votes: { confirm: 1, reject: 7 },
+        userVote: 'confirm',
       },
     });
   });
@@ -198,6 +232,17 @@ describe('application foundation', () => {
     });
     expect(invalidCreate.statusCode).toBe(400);
     expect(invalidCreate.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+
+    for (const payload of [{}, { value: 'maybe' }, { value: null, extra: true }]) {
+      const invalidVote = await app.inject({
+        method: 'PUT',
+        url: `/api/v1/observations/${observation.id}/vote`,
+        headers: authorization,
+        payload,
+      });
+      expect(invalidVote.statusCode).toBe(400);
+      expect(invalidVote.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+    }
 
     const invalidQueries = [
       '',
@@ -272,6 +317,14 @@ describe('application foundation', () => {
       expect(invalid.statusCode).toBe(401);
       expect(invalid.json()).toMatchObject({ error: { code: 'CLIENT_TOKEN_INVALID' } });
     }
+
+    const missingVote = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/observations/${observation.id}/vote`,
+      payload: { value: 'confirm' },
+    });
+    expect(missingVote.statusCode).toBe(401);
+    expect(missingVote.json()).toMatchObject({ error: { code: 'CLIENT_TOKEN_REQUIRED' } });
   });
 
   it('does not expose the previous unversioned API routes', async () => {

@@ -6,9 +6,15 @@ const DATABASE_URL = 'postgresql://localhost/animals';
 describe('environment', () => {
   it('reads defaults and explicit settings', () => {
     expect(readEnvironment({ DATABASE_URL })).toEqual({
-      DATABASE_URL, HOST: '127.0.0.1', PORT: 3000, LOG_LEVEL: 'info',
+      DATABASE_URL,
+      DESCRIPTIONS_ENABLED: true,
+      HOST: '127.0.0.1',
+      PORT: 3000,
+      LOG_LEVEL: 'info',
     });
     expect(readEnvironment({ DATABASE_URL, PORT: '8080', LOG_LEVEL: 'warn' }).PORT).toBe(8080);
+    expect(readEnvironment({ DATABASE_URL, DESCRIPTIONS_ENABLED: 'false' }).DESCRIPTIONS_ENABLED)
+      .toBe(false);
   });
 
   it('accepts only explicit proxy IP addresses and networks', () => {
@@ -22,6 +28,11 @@ describe('environment', () => {
 
   it.each(['', '0', '-1', '65536', '1.5', 'invalid'])('rejects invalid port %j', (PORT) => {
     expect(() => readEnvironment({ DATABASE_URL, PORT })).toThrow('PORT');
+  });
+
+  it.each(['', 'yes', '1', 'TRUE'])('rejects invalid descriptions setting %j', (value) => {
+    expect(() => readEnvironment({ DATABASE_URL, DESCRIPTIONS_ENABLED: value }))
+      .toThrow('DESCRIPTIONS_ENABLED');
   });
 
   it.each([undefined, '', 'https://localhost/animals', 'postgresql://localhost'])('requires a PostgreSQL URL with a database', (url) => {

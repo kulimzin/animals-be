@@ -18,6 +18,7 @@ import { createAnimalService } from '../../src/modules/animals/animal-service.js
 import { createPostgresClientRepository } from '../../src/modules/clients/client-repository.js';
 import { createClientService } from '../../src/modules/clients/client-service.js';
 import { createClientAuthenticationHook } from '../../src/modules/clients/http.js';
+import { createPublicConfig } from '../../src/modules/config/public-config.js';
 import { createPostgresObservationRepository } from '../../src/modules/observations/observation-repository.js';
 import { createObservationService } from '../../src/modules/observations/observation-service.js';
 
@@ -303,6 +304,30 @@ describe('database migrations and constraints', () => {
     }
   });
 
+  it('returns public configuration only to authenticated clients', async () => {
+    const { token } = await seedAuthenticatedClient();
+    const app = buildApp({ animalService, clientService, observationService });
+    try {
+      const missing = await app.inject({ method: 'GET', url: '/api/v1/config' });
+      expect(missing.statusCode).toBe(401);
+      expect(missing.json()).toMatchObject({ error: { code: 'CLIENT_TOKEN_REQUIRED' } });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/config',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        descriptionsEnabled: true,
+        noteMaxLength: 200,
+        mapResultLimit: 2000,
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it('creates an observation for an active animal and validates business constraints', async () => {
     const { token } = await seedAuthenticatedClient();
     const app = buildApp({ animalService, clientService, observationService });
@@ -404,6 +429,75 @@ describe('database migrations and constraints', () => {
       expect(await database.db.select({ value: count() }).from(observations)).toEqual([{ value: 1 }]);
     } finally {
       await app.close();
+    }
+  });
+
+  it('rejects new descriptions when disabled but allows a successful idempotent replay', async () => {
+    const { token } = await seedAuthenticatedClient();
+    const idempotencyKey = randomUUID();
+    const request = {
+      method: 'POST' as const,
+      url: '/api/v1/observations',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': idempotencyKey,
+      },
+      payload: {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        location: { longitude: 37.6176, latitude: 55.7558 },
+        observedAt: new Date(Date.now() - 60_000).toISOString(),
+        note: 'Видел у тропы',
+      },
+    };
+    const enabledApp = buildApp({ animalService, clientService, observationService });
+    try {
+      const created = await enabledApp.inject(request);
+      expect(created.statusCode).toBe(201);
+    } finally {
+      await enabledApp.close();
+    }
+
+    const disabledConfig = createPublicConfig(false);
+    const disabledObservationService = createObservationService(
+      createPostgresObservationRepository(database.db),
+      disabledConfig,
+    );
+    const disabledApp = buildApp({
+      animalService,
+      clientService,
+      observationService: disabledObservationService,
+      publicConfig: disabledConfig,
+    });
+    try {
+      const configResponse = await disabledApp.inject({
+        method: 'GET',
+        url: '/api/v1/config',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(configResponse.statusCode).toBe(200);
+      expect(configResponse.json()).toMatchObject({ descriptionsEnabled: false });
+
+      const replayed = await disabledApp.inject(request);
+      expect(replayed.statusCode).toBe(201);
+      expect(replayed.json<{ data: { note: string | null } }>()).toMatchObject({
+        data: { note: 'Видел у тропы' },
+      });
+
+      const rejected = await disabledApp.inject({
+        ...request,
+        headers: { ...request.headers, 'idempotency-key': randomUUID() },
+      });
+      expect(rejected.statusCode).toBe(422);
+      expect(rejected.json()).toMatchObject({ error: { code: 'DESCRIPTION_DISABLED' } });
+
+      const withoutDescription = await disabledApp.inject({
+        ...request,
+        headers: { ...request.headers, 'idempotency-key': randomUUID() },
+        payload: { ...request.payload, note: null },
+      });
+      expect(withoutDescription.statusCode).toBe(201);
+    } finally {
+      await disabledApp.close();
     }
   });
 

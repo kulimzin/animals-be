@@ -22,6 +22,7 @@ export type ObservationRecord = {
 
 export type CreateObservationInput = {
   clientId: string;
+  descriptionsEnabled: boolean;
   idempotencyKey: string;
   requestHash: string;
   animalId: string;
@@ -34,6 +35,7 @@ export type CreateObservationInput = {
 export type CreateObservationResult =
   | { status: 'created' | 'replayed'; observation: ObservationRecord }
   | { status: 'animal-not-available' }
+  | { status: 'description-disabled' }
   | { status: 'idempotency-conflict' }
   | { status: 'observed-at-invalid' };
 
@@ -104,6 +106,10 @@ export function createPostgresObservationRepository(database: Database): Observa
             .limit(1);
           if (!observation) throw new Error('Idempotent observation could not be loaded');
           return { status: 'replayed', observation };
+        }
+
+        if (!input.descriptionsEnabled && input.note !== null) {
+          return { status: 'description-disabled' };
         }
 
         if (input.observedAt > now

@@ -12,6 +12,9 @@ import type { AnimalService } from './modules/animals/animal-service.js';
 import { registerAnimalRoutes } from './modules/animals/http.js';
 import type { ClientService } from './modules/clients/client-service.js';
 import { createClientAuthenticationHook, registerClientRoutes } from './modules/clients/http.js';
+import { registerConfigRoutes } from './modules/config/http.js';
+import { createPublicConfig } from './modules/config/public-config.js';
+import type { PublicConfig } from './modules/config/public-config.js';
 import type { ObservationService } from './modules/observations/observation-service.js';
 import { registerObservationRoutes } from './modules/observations/http.js';
 import { registerErrorHandlers } from './shared/http/error-handler.js';
@@ -20,6 +23,7 @@ type BuildAppOptions = {
   animalService: AnimalService;
   clientService: ClientService;
   observationService: ObservationService;
+  publicConfig?: PublicConfig;
   logger?: FastifyServerOptions['logger'];
   trustProxy?: string[] | undefined;
 };
@@ -61,6 +65,7 @@ export function buildApp({
   animalService,
   clientService,
   observationService,
+  publicConfig = createPublicConfig(true),
   logger = false,
   trustProxy,
 }: BuildAppOptions) {
@@ -95,6 +100,7 @@ export function buildApp({
       tags: [
         { name: 'animals', description: 'Animal directory' },
         { name: 'clients', description: 'Anonymous browser clients' },
+        { name: 'config', description: 'Public application configuration' },
         { name: 'observations', description: 'Animal observations' },
       ],
     },
@@ -106,6 +112,7 @@ export function buildApp({
     registerClientRoutes(routesApp, clientService);
     void routesApp.register((protectedApp, _protectedOptions, protectedDone) => {
       protectedApp.addHook('preHandler', createClientAuthenticationHook(clientService));
+      registerConfigRoutes(protectedApp, publicConfig);
       registerAnimalRoutes(protectedApp, animalService);
       registerObservationRoutes(protectedApp, observationService);
       protectedDone();

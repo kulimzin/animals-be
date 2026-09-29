@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { errorResponseSchema, successResponseSchema } from '../../shared/http/schemas.js';
+import { NOTE_MAX_LENGTH } from '../config/public-config.js';
 import type { ObservationRecord } from './observation-repository.js';
 import type { ObservationService } from './observation-service.js';
 
@@ -35,7 +36,7 @@ const createObservationBodySchema = z.object({
   location: locationSchema,
   observedAt: z.iso.datetime({ offset: true }),
   locationLabel: optionalText(300),
-  note: optionalText(200),
+  note: optionalText(NOTE_MAX_LENGTH),
 }).strict();
 
 const createObservationHeadersSchema = z.object({

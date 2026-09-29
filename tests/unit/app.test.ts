@@ -62,6 +62,7 @@ describe('application foundation', () => {
       paths: {
         '/api/v1/animals': { get: { operationId: 'listAnimals' } },
         '/api/v1/clients': { post: { operationId: 'createClient' } },
+        '/api/v1/config': { get: { operationId: 'getConfig' } },
         '/api/v1/observations': {
           get: { operationId: 'listObservations' },
           post: { operationId: 'createObservation' },
@@ -75,8 +76,24 @@ describe('application foundation', () => {
     });
     expect(document.paths['/api/v1/clients']?.post?.security).toBeUndefined();
     expect(document.paths['/api/v1/animals']?.get?.security).toEqual([{ bearerAuth: [] }]);
+    expect(document.paths['/api/v1/config']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.post?.security).toEqual([{ bearerAuth: [] }]);
+  });
+
+  it('returns public application configuration to an authenticated client', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/config',
+      headers: authorization,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      descriptionsEnabled: true,
+      noteMaxLength: 200,
+      mapResultLimit: 2000,
+    });
   });
 
   it('returns the authenticated observation list in the common envelope', async () => {
@@ -163,7 +180,7 @@ describe('application foundation', () => {
     const issued = await app.inject({ method: 'POST', url: '/api/v1/clients' });
     expect(issued.statusCode).toBe(201);
 
-    for (const url of ['/api/v1/animals', '/api/v1/observations']) {
+    for (const url of ['/api/v1/animals', '/api/v1/config', '/api/v1/observations']) {
       const missing = await app.inject({ method: 'GET', url });
       expect(missing.statusCode).toBe(401);
       expect(missing.headers['www-authenticate']).toBe('Bearer');
@@ -183,6 +200,7 @@ describe('application foundation', () => {
     for (const request of [
       { method: 'POST' as const, url: '/clients' },
       { method: 'GET' as const, url: '/animals' },
+      { method: 'GET' as const, url: '/config' },
       { method: 'GET' as const, url: '/observations' },
     ]) {
       const response = await app.inject(request);

@@ -11,7 +11,7 @@ import {
 import type { AnimalService } from './modules/animals/animal-service.js';
 import { registerAnimalRoutes } from './modules/animals/http.js';
 import type { ClientService } from './modules/clients/client-service.js';
-import { registerClientRoutes } from './modules/clients/http.js';
+import { createClientAuthenticationHook, registerClientRoutes } from './modules/clients/http.js';
 import type { ObservationService } from './modules/observations/observation-service.js';
 import { registerObservationRoutes } from './modules/observations/http.js';
 import { registerErrorHandlers } from './shared/http/error-handler.js';
@@ -28,7 +28,7 @@ const openApiTransform: SwaggerTransformObject = (document) => {
   const openApi = jsonSchemaTransformObject(document);
   if (!('paths' in openApi)) return openApi;
 
-  const responses = openApi.paths?.['/clients']?.post?.responses;
+  const responses = openApi.paths?.['/api/v1/clients']?.post?.responses;
   const created = responses?.['201'];
   if (created && !('$ref' in created)) {
     created.headers = {
@@ -103,12 +103,20 @@ export function buildApp({
   });
 
   void app.register((routesApp, _options, done) => {
-    registerAnimalRoutes(routesApp, animalService);
     registerClientRoutes(routesApp, clientService);
-    registerObservationRoutes(routesApp, observationService, clientService);
-    routesApp.get('/openapi.json', {
+    void routesApp.register((protectedApp, _protectedOptions, protectedDone) => {
+      protectedApp.addHook('preHandler', createClientAuthenticationHook(clientService));
+      registerAnimalRoutes(protectedApp, animalService);
+      registerObservationRoutes(protectedApp, observationService);
+      protectedDone();
+    });
+    done();
+  }, { prefix: '/api/v1' });
+
+  void app.register((documentationApp, _options, done) => {
+    documentationApp.get('/openapi.json', {
       schema: { hide: true },
-    }, async (_request, reply) => reply.send(routesApp.swagger()));
+    }, async (_request, reply) => reply.send(documentationApp.swagger()));
     done();
   });
 

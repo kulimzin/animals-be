@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { successResponseSchema } from '../../shared/http/schemas.js';
+import { errorResponseSchema, successResponseSchema } from '../../shared/http/schemas.js';
 import type { AnimalService } from './animal-service.js';
 
 const animalSchema = z.object({
@@ -21,8 +21,10 @@ export function registerAnimalRoutes(app: FastifyInstance, animalService: Animal
       operationId: 'listAnimals',
       summary: 'List animals available for new observations',
       tags: ['animals'],
+      security: [{ bearerAuth: [] }],
       response: {
         200: listAnimalsResponseSchema,
+        401: errorResponseSchema,
       },
     },
   }, async () => {

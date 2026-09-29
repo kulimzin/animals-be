@@ -41,13 +41,12 @@ export const animals = pgTable('animals', {
   slug: text().notNull(),
   nameRu: text('name_ru').notNull(),
   nameEn: text('name_en').notNull(),
-  icon: text().notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
 }, (table) => [
   uniqueIndex('animals_slug_unique').on(table.slug),
   check('animals_slug_not_blank', sql`length(btrim(${table.slug})) > 0`),
   check('animals_name_ru_not_blank', sql`length(btrim(${table.nameRu})) > 0`),
   check('animals_name_en_not_blank', sql`length(btrim(${table.nameEn})) > 0`),
-  check('animals_icon_not_blank', sql`length(btrim(${table.icon})) > 0`),
 ]);
 
 export const clients = pgTable('clients', {

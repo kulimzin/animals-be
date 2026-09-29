@@ -8,11 +8,14 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
+import type { AnimalService } from './modules/animals/animal-service.js';
+import { registerAnimalRoutes } from './modules/animals/http.js';
 import type { ClientService } from './modules/clients/client-service.js';
 import { registerClientRoutes } from './modules/clients/http.js';
 import { registerErrorHandlers } from './shared/http/error-handler.js';
 
 type BuildAppOptions = {
+  animalService: AnimalService;
   clientService: ClientService;
   logger?: FastifyServerOptions['logger'];
   trustProxy?: string[] | undefined;
@@ -51,7 +54,7 @@ const openApiTransform: SwaggerTransformObject = (document) => {
   return openApi;
 };
 
-export function buildApp({ clientService, logger = false, trustProxy }: BuildAppOptions) {
+export function buildApp({ animalService, clientService, logger = false, trustProxy }: BuildAppOptions) {
   const app = Fastify({
     logger,
     trustProxy: trustProxy ?? false,
@@ -80,13 +83,17 @@ export function buildApp({ clientService, logger = false, trustProxy }: BuildApp
           },
         },
       },
-      tags: [{ name: 'clients', description: 'Anonymous browser clients' }],
+      tags: [
+        { name: 'animals', description: 'Animal directory' },
+        { name: 'clients', description: 'Anonymous browser clients' },
+      ],
     },
     transform: jsonSchemaTransform,
     transformObject: openApiTransform,
   });
 
   void app.register((routesApp, _options, done) => {
+    registerAnimalRoutes(routesApp, animalService);
     registerClientRoutes(routesApp, clientService);
     routesApp.get('/openapi.json', {
       schema: { hide: true },

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
@@ -12,6 +13,8 @@ import {
   observations,
   votes,
 } from '../../src/infrastructure/database/schema.js';
+import { createPostgresAnimalRepository } from '../../src/modules/animals/animal-repository.js';
+import { createAnimalService } from '../../src/modules/animals/animal-service.js';
 import { createPostgresClientRepository } from '../../src/modules/clients/client-repository.js';
 import { createClientService } from '../../src/modules/clients/client-service.js';
 import { createClientAuthenticationHook } from '../../src/modules/clients/http.js';
@@ -32,14 +35,29 @@ function readTestDatabaseUrl() {
 
 const connectionString = readTestDatabaseUrl();
 const database = createDatabase(connectionString);
+const animalService = createAnimalService(createPostgresAnimalRepository(database.db));
 const clientService = createClientService(createPostgresClientRepository(database.db));
+let upgradeResult: {
+  animalId: string;
+  iconColumnCount: number;
+  isActive: boolean;
+  nameEn: string;
+  nameRu: string;
+  observationAnimalId: string;
+};
+
+async function executeMigrationFile(relativePath: string) {
+  const migration = await readFile(new URL(relativePath, import.meta.url), 'utf8');
+  for (const statement of migration.split('--> statement-breakpoint')) {
+    if (statement.trim()) await database.pool.query(statement);
+  }
+}
 
 async function seedReferences() {
   const [animal] = await database.db.insert(animals).values({
     slug: `test-${randomUUID()}`,
     nameRu: 'Тестовое животное',
     nameEn: 'Test animal',
-    icon: 'test-icon',
   }).returning({ id: animals.id });
   const [author, voter] = await database.db.insert(clients).values([
     { tokenHash: 'a'.repeat(64) },
@@ -54,13 +72,70 @@ describe('database migrations and constraints', () => {
     await database.pool.query('DROP SCHEMA public CASCADE');
     await database.pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
     await database.pool.query('CREATE SCHEMA public');
+    await executeMigrationFile('../../drizzle/0000_natural_talkback.sql');
+    const legacyAnimalId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const legacyClientId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    await database.pool.query(`
+      INSERT INTO animals (id, slug, name_ru, name_en, icon)
+      VALUES ($1, 'tiger', 'Старое название', 'Old name', 'old-icon')
+    `, [legacyAnimalId]);
+    await database.pool.query(`
+      INSERT INTO clients (id, token_hash) VALUES ($1, $2)
+    `, [legacyClientId, 'a'.repeat(64)]);
+    await database.pool.query(`
+      INSERT INTO observations (animal_id, client_id, location, observed_at)
+      VALUES ($1, $2, ST_SetSRID(ST_MakePoint(37.6, 55.7), 4326), now() - interval '1 minute')
+    `, [legacyAnimalId, legacyClientId]);
+    await executeMigrationFile('../../drizzle/0001_pink_loners.sql');
+    const upgraded = await database.pool.query<{
+      animalId: string;
+      iconColumnCount: number;
+      isActive: boolean;
+      nameEn: string;
+      nameRu: string;
+      observationAnimalId: string;
+    }>(`
+      SELECT animal.id AS "animalId",
+             animal.is_active AS "isActive",
+             animal.name_ru AS "nameRu",
+             animal.name_en AS "nameEn",
+             observation.animal_id AS "observationAnimalId",
+             (
+               SELECT count(*)::int
+               FROM information_schema.columns
+               WHERE table_schema = 'public'
+                 AND table_name = 'animals'
+                 AND column_name = 'icon'
+             ) AS "iconColumnCount"
+      FROM animals animal
+      JOIN observations observation ON observation.animal_id = animal.id
+      WHERE animal.slug = 'tiger'
+    `);
+    const row = upgraded.rows[0];
+    if (!row) throw new Error('Migration upgrade check did not return the legacy animal');
+    upgradeResult = row;
+
+    await database.pool.query('DROP SCHEMA public CASCADE');
+    await database.pool.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
+    await database.pool.query('CREATE SCHEMA public');
     await applyMigrations(connectionString);
     // Applying the command repeatedly must not replay an already recorded migration.
     await applyMigrations(connectionString);
   });
 
+  it('upgrades existing animals without breaking observation references', () => {
+    expect(upgradeResult).toEqual({
+      animalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      iconColumnCount: 0,
+      isActive: true,
+      nameEn: 'Tiger',
+      nameRu: 'Тигр',
+      observationAnimalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    });
+  });
+
   it('issues an opaque token while storing only its SHA-256 hash', async () => {
-    const app = buildApp({ clientService });
+    const app = buildApp({ animalService, clientService });
     try {
       const response = await app.inject({
         method: 'POST',
@@ -84,7 +159,7 @@ describe('database migrations and constraints', () => {
   });
 
   it('authenticates a valid bearer token and returns stable credential errors', async () => {
-    const app = buildApp({ clientService });
+    const app = buildApp({ animalService, clientService });
     app.get('/test/protected', {
       schema: { hide: true },
       preHandler: createClientAuthenticationHook(clientService),
@@ -126,7 +201,7 @@ describe('database migrations and constraints', () => {
   });
 
   it('atomically limits issuance to ten requests per address and blocks for one hour', async () => {
-    const app = buildApp({ clientService });
+    const app = buildApp({ animalService, clientService });
     try {
       const responses = await Promise.all(Array.from({ length: 12 }, () => app.inject({
         method: 'POST',
@@ -161,16 +236,17 @@ describe('database migrations and constraints', () => {
         client_issuance_events,
         votes,
         observations,
-        clients,
-        animals
+        clients
     `);
+    await database.pool.query(`DELETE FROM animals WHERE slug LIKE 'test-%'`);
+    await database.pool.query(`UPDATE animals SET is_active = true`);
   });
 
   afterAll(async () => {
     await database.pool.end();
   });
 
-  it('applies the initial migration to a clean PostGIS database without seed animals', async () => {
+  it('applies migrations repeatedly and seeds the animal directory', async () => {
     const result = await database.db.execute<{
       database: string;
       postgis: string;
@@ -184,10 +260,31 @@ describe('database migrations and constraints', () => {
     `);
     expect(result.rows[0]).toMatchObject({
       database: 'animals_test',
-      migrationCount: 1,
-      animalCount: 0,
+      migrationCount: 2,
+      animalCount: 116,
     });
     expect(result.rows[0]?.postgis).toMatch(/^3\./);
+  });
+
+  it('returns active animals with both localized names', async () => {
+    await database.db.update(animals).set({ isActive: false }).where(eq(animals.slug, 'tiger'));
+    const app = buildApp({ animalService, clientService });
+    try {
+      const response = await app.inject({ method: 'GET', url: '/animals' });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json<{
+        data: Array<{ id: string; slug: string; name: { ru: string; en: string } }>;
+      }>();
+      expect(body.data).toHaveLength(115);
+      expect(body.data.some((animal) => animal.slug === 'tiger')).toBe(false);
+      expect(body.data.find((animal) => animal.slug === 'wolf')).toMatchObject({
+        id: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        name: { ru: 'Волк', en: 'Wolf' },
+      });
+    } finally {
+      await app.close();
+    }
   });
 
   it('stores WGS 84 points in longitude-latitude order and creates a GiST index', async () => {
@@ -231,7 +328,6 @@ describe('database migrations and constraints', () => {
       slug: `test-${randomUUID()}`,
       nameRu: ' ',
       nameEn: 'Test',
-      icon: 'icon',
     })).rejects.toMatchObject({ cause: { code: '23514' } });
 
     await expect(database.pool.query(`

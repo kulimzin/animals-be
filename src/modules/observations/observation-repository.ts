@@ -1,14 +1,25 @@
-import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
 import type { Database } from '../../infrastructure/database.js';
 import {
   animals,
   observationIdempotency,
   observations,
+  publicationEvents,
   votes,
 } from '../../infrastructure/database/schema.js';
 
 const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const OBSERVATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const PUBLICATION_RATE_WINDOW_MS = 60 * 60 * 1000;
+const PUBLICATION_EVENT_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+function publicationPauseMs(recentPublicationCount: number) {
+  if (recentPublicationCount === 0) return 0;
+  if (recentPublicationCount === 1) return 30 * 1000;
+  if (recentPublicationCount === 2) return 60 * 1000;
+  if (recentPublicationCount <= 4) return 3 * 60 * 1000;
+  return 10 * 60 * 1000;
+}
 
 export type ObservationDetailsRecord = {
   id: string;
@@ -40,7 +51,8 @@ export type CreateObservationResult =
   | { status: 'description-disabled' }
   | { status: 'idempotency-conflict' }
   | { status: 'idempotency-result-gone' }
-  | { status: 'observed-at-invalid' };
+  | { status: 'observed-at-invalid' }
+  | { status: 'rate-limited'; retryAfterSeconds: number; availableAt: Date };
 
 export type ObservationPeriod = '1h' | '24h' | '7d' | '30d';
 
@@ -136,12 +148,14 @@ export function createPostgresObservationRepository(database: Database): Observa
   return {
     create(input) {
       return database.transaction(async (transaction) => {
-        // The per-client key lock makes both identical and conflicting concurrent retries deterministic.
+        // One lock per client protects both idempotency and the adaptive publication interval.
         await transaction.execute(sql`
-          select pg_advisory_xact_lock(hashtextextended(${`${input.clientId}:${input.idempotencyKey}`}, 0))
+          select pg_advisory_xact_lock(hashtextextended(${`observation-publication:${input.clientId}`}, 0))
         `);
 
-        const databaseTime = await transaction.execute<{ now: string }>(sql`select now() as now`);
+        const databaseTime = await transaction.execute<{ now: string }>(
+          sql`select clock_timestamp() as now`,
+        );
         const now = new Date(databaseTime.rows[0]?.now ?? Number.NaN);
         if (Number.isNaN(now.getTime())) throw new Error('Database did not return its current time');
 
@@ -167,7 +181,10 @@ export function createPostgresObservationRepository(database: Database): Observa
             .from(observations)
             .where(and(
               eq(observations.id, existing.observationId),
-              sql`${observations.observedAt} > now() - interval '30 days'`,
+              gt(
+                observations.observedAt,
+                new Date(now.getTime() - OBSERVATION_WINDOW_MS),
+              ),
             ))
             .limit(1);
           if (!observation) return { status: 'idempotency-result-gone' };
@@ -190,6 +207,34 @@ export function createPostgresObservationRepository(database: Database): Observa
           .limit(1);
         if (!animal) return { status: 'animal-not-available' };
 
+        await transaction.delete(publicationEvents).where(lte(
+          publicationEvents.publishedAt,
+          new Date(now.getTime() - PUBLICATION_EVENT_RETENTION_MS),
+        ));
+
+        const recentPublications = await transaction.select({
+          publishedAt: publicationEvents.publishedAt,
+        }).from(publicationEvents).where(and(
+          eq(publicationEvents.clientId, input.clientId),
+          gt(
+            publicationEvents.publishedAt,
+            new Date(now.getTime() - PUBLICATION_RATE_WINDOW_MS),
+          ),
+        )).orderBy(desc(publicationEvents.publishedAt)).limit(5);
+
+        const latestPublication = recentPublications[0];
+        const pauseMs = publicationPauseMs(recentPublications.length);
+        if (latestPublication && pauseMs > 0) {
+          const availableAt = new Date(latestPublication.publishedAt.getTime() + pauseMs);
+          if (availableAt > now) {
+            return {
+              status: 'rate-limited',
+              retryAfterSeconds: Math.ceil((availableAt.getTime() - now.getTime()) / 1000),
+              availableAt,
+            };
+          }
+        }
+
         const [created] = await transaction.insert(observations).values({
           animalId: input.animalId,
           clientId: input.clientId,
@@ -208,6 +253,10 @@ export function createPostgresObservationRepository(database: Database): Observa
           observationId: created.id,
           createdAt: now,
           expiresAt: new Date(now.getTime() + IDEMPOTENCY_WINDOW_MS),
+        });
+        await transaction.insert(publicationEvents).values({
+          clientId: input.clientId,
+          publishedAt: now,
         });
 
         const [observation] = await transaction.select(observationDetailsSelection(input.clientId))

@@ -89,6 +89,23 @@ describe('observation service', () => {
     });
   });
 
+  it('maps publication throttling to retry metadata', async () => {
+    const availableAt = new Date('2026-09-29T07:16:00.000Z');
+    const service = createObservationService(createRepository({
+      create: () => Promise.resolve({
+        status: 'rate-limited',
+        retryAfterSeconds: 42,
+        availableAt,
+      }),
+    }));
+
+    await expect(service.create('client-id', draft)).rejects.toMatchObject<ApiError>({
+      statusCode: 429,
+      code: 'RATE_LIMITED',
+      rateLimit: { retryAfterSeconds: 42, availableAt },
+    });
+  });
+
   it('returns details personalized for the authenticated client', async () => {
     const calls: Array<{ id: string; clientId: string }> = [];
     const service = createObservationService(createRepository({

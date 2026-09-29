@@ -21,11 +21,16 @@ export function registerErrorHandlers(app: FastifyInstance) {
     }
 
     if (error instanceof ApiError) {
+      if (error.rateLimit) reply.header('Retry-After', error.rateLimit.retryAfterSeconds);
       return reply.status(error.statusCode).send({
         error: {
           code: error.code,
           message: error.message,
           ...(error.details ? { details: error.details } : {}),
+          ...(error.rateLimit ? {
+            retryAfterSeconds: error.rateLimit.retryAfterSeconds,
+            availableAt: error.rateLimit.availableAt.toISOString(),
+          } : {}),
         },
       });
     }

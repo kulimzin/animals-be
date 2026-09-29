@@ -9,6 +9,8 @@ export const errorResponseSchema = z.object({
       path: z.string(),
       message: z.string(),
     })).optional(),
+    retryAfterSeconds: z.number().int().positive().optional(),
+    availableAt: z.iso.datetime().optional(),
   }),
 });
 

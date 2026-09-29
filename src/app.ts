@@ -59,6 +59,22 @@ const openApiTransform: SwaggerTransformObject = (document) => {
     };
   }
 
+  const publicationRateLimited = openApi.paths?.['/api/v1/observations']?.post
+    ?.responses?.['429'];
+  if (publicationRateLimited && !('$ref' in publicationRateLimited)) {
+    publicationRateLimited.headers = {
+      ...publicationRateLimited.headers,
+      'Cache-Control': {
+        description: 'Prevents shared caching of the client-specific publication limit',
+        schema: { type: 'string', enum: ['private, no-store'] },
+      },
+      'Retry-After': {
+        description: 'Seconds until another observation may be published',
+        schema: { type: 'integer', minimum: 1 },
+      },
+    };
+  }
+
   for (const [path, method, status] of [
     ['/api/v1/observations', 'post', '201'],
     ['/api/v1/observations/{id}', 'get', '200'],

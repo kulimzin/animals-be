@@ -1,8 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { createClientAuthenticationHook } from '../clients/http.js';
-import type { ClientService } from '../clients/client-service.js';
 import { errorResponseSchema, successResponseSchema } from '../../shared/http/schemas.js';
 import type { ObservationRecord } from './observation-repository.js';
 import type { ObservationService } from './observation-service.js';
@@ -75,7 +73,6 @@ function toObservationDto(observation: ObservationRecord) {
 export function registerObservationRoutes(
   app: FastifyInstance,
   observationService: ObservationService,
-  clientService: ClientService,
 ) {
   app.withTypeProvider<ZodTypeProvider>().post('/observations', {
     schema: {
@@ -93,7 +90,6 @@ export function registerObservationRoutes(
         422: errorResponseSchema,
       },
     },
-    preHandler: createClientAuthenticationHook(clientService),
   }, async (request, reply) => {
     if (!request.client) throw new Error('Authenticated client is missing');
     const observation = await observationService.create(request.client.id, {
@@ -112,10 +108,12 @@ export function registerObservationRoutes(
       operationId: 'listObservations',
       summary: 'List observations',
       tags: ['observations'],
+      security: [{ bearerAuth: [] }],
       querystring: listObservationsQuerySchema,
       response: {
         200: listObservationsResponseSchema,
         400: errorResponseSchema,
+        401: errorResponseSchema,
       },
     },
   }, async (request) => {

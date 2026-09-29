@@ -150,7 +150,7 @@ describe('database migrations and constraints', () => {
     try {
       const response = await app.inject({
         method: 'POST',
-        url: '/clients',
+        url: '/api/v1/clients',
         remoteAddress: '203.0.113.10',
       });
 
@@ -179,7 +179,7 @@ describe('database migrations and constraints', () => {
     try {
       const issuance = await app.inject({
         method: 'POST',
-        url: '/clients',
+        url: '/api/v1/clients',
         remoteAddress: '203.0.113.11',
       });
       const token = issuance.json<{ data: { token: string } }>().data.token;
@@ -216,7 +216,7 @@ describe('database migrations and constraints', () => {
     try {
       const responses = await Promise.all(Array.from({ length: 12 }, () => app.inject({
         method: 'POST',
-        url: '/clients',
+        url: '/api/v1/clients',
         remoteAddress: '2001:db8:1234:5678::1234',
       })));
       const statuses = responses.map((response) => response.statusCode).sort();
@@ -278,10 +278,15 @@ describe('database migrations and constraints', () => {
   });
 
   it('returns active animals with both localized names', async () => {
+    const { token } = await seedAuthenticatedClient();
     await database.db.update(animals).set({ isActive: false }).where(eq(animals.slug, 'tiger'));
     const app = buildApp({ animalService, clientService, observationService });
     try {
-      const response = await app.inject({ method: 'GET', url: '/animals' });
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/animals',
+        headers: { authorization: `Bearer ${token}` },
+      });
 
       expect(response.statusCode).toBe(200);
       const body = response.json<{
@@ -308,7 +313,7 @@ describe('database migrations and constraints', () => {
     try {
       const created = await app.inject({
         method: 'POST',
-        url: '/observations',
+        url: '/api/v1/observations',
         headers,
         payload: {
           animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
@@ -335,7 +340,7 @@ describe('database migrations and constraints', () => {
         .where(eq(animals.id, '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4'));
       const inactive = await app.inject({
         method: 'POST',
-        url: '/observations',
+        url: '/api/v1/observations',
         headers: { ...headers, 'idempotency-key': randomUUID() },
         payload: {
           animalId: '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4',
@@ -348,7 +353,7 @@ describe('database migrations and constraints', () => {
 
       const tooOld = await app.inject({
         method: 'POST',
-        url: '/observations',
+        url: '/api/v1/observations',
         headers: { ...headers, 'idempotency-key': randomUUID() },
         payload: {
           animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
@@ -369,7 +374,7 @@ describe('database migrations and constraints', () => {
     const idempotencyKey = randomUUID();
     const request = {
       method: 'POST' as const,
-      url: '/observations',
+      url: '/api/v1/observations',
       headers: {
         authorization: `Bearer ${token}`,
         'idempotency-key': idempotencyKey,
@@ -403,7 +408,7 @@ describe('database migrations and constraints', () => {
   });
 
   it('lists deactivated animals, filters by repeated animal ids and paginates by cursor', async () => {
-    const { clientId } = await seedAuthenticatedClient();
+    const { clientId, token } = await seedAuthenticatedClient();
     const wolfId = '423e53fb-01c1-521b-8b29-6cccf5268618';
     const tigerId = '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4';
     await database.db.insert(observations).values([
@@ -426,7 +431,8 @@ describe('database migrations and constraints', () => {
     try {
       const first = await app.inject({
         method: 'GET',
-        url: `/observations?animalId=${wolfId}&animalId=${tigerId}&limit=1`,
+        url: `/api/v1/observations?animalId=${wolfId}&animalId=${tigerId}&limit=1`,
+        headers: { authorization: `Bearer ${token}` },
       });
       expect(first.statusCode).toBe(200);
       const firstBody = first.json<{
@@ -442,7 +448,8 @@ describe('database migrations and constraints', () => {
 
       const second = await app.inject({
         method: 'GET',
-        url: `/observations?animalId=${wolfId}&animalId=${tigerId}&limit=1&cursor=${encodeURIComponent(firstBody.meta.nextCursor ?? '')}`,
+        url: `/api/v1/observations?animalId=${wolfId}&animalId=${tigerId}&limit=1&cursor=${encodeURIComponent(firstBody.meta.nextCursor ?? '')}`,
+        headers: { authorization: `Bearer ${token}` },
       });
       expect(second.statusCode).toBe(200);
       expect(second.json()).toMatchObject({

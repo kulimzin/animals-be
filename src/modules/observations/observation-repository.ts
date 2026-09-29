@@ -71,6 +71,11 @@ export type ObservationRepository = {
   create(input: CreateObservationInput): Promise<CreateObservationResult>;
   findDetails(id: string, clientId: string): Promise<ObservationDetailsRecord | null>;
   list(input: ListObservationsInput): Promise<ListObservationsResult>;
+  vote(
+    observationId: string,
+    clientId: string,
+    value: 'confirm' | 'reject' | null,
+  ): Promise<ObservationDetailsRecord | null>;
 };
 
 const observationDetailsSelection = (clientId: string) => ({
@@ -266,6 +271,43 @@ export function createPostgresObservationRepository(database: Database): Observa
           observations: rows.slice(0, input.limit),
           hasMore: rows.length > input.limit,
         };
+      });
+    },
+
+    vote(observationId, clientId, value) {
+      return database.transaction(async (transaction) => {
+        const [availableObservation] = await transaction.select({ id: observations.id })
+          .from(observations)
+          .where(and(
+            eq(observations.id, observationId),
+            sql`${observations.observedAt} > now() - interval '30 days'`,
+          ))
+          .for('update')
+          .limit(1);
+        if (!availableObservation) return null;
+
+        if (value === null) {
+          await transaction.delete(votes).where(and(
+            eq(votes.observationId, observationId),
+            eq(votes.clientId, clientId),
+          ));
+        } else {
+          await transaction.insert(votes).values({
+            observationId,
+            clientId,
+            value,
+          }).onConflictDoUpdate({
+            target: [votes.observationId, votes.clientId],
+            set: { value, updatedAt: sql`now()` },
+          });
+        }
+
+        const [observation] = await transaction.select(observationDetailsSelection(clientId))
+          .from(observations)
+          .where(eq(observations.id, observationId))
+          .limit(1);
+        if (!observation) throw new Error('Voted observation could not be loaded');
+        return observation;
       });
     },
   };

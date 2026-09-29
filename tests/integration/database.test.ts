@@ -544,6 +544,153 @@ describe('database migrations and constraints', () => {
     }
   });
 
+  it('creates, changes, repeats and removes a vote with current personalized counters', async () => {
+    const { clientId, token } = await seedAuthenticatedClient();
+    const { clientId: otherClientId } = await seedAuthenticatedClient('h'.repeat(43));
+    const [observation] = await database.db.insert(observations).values({
+      animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+      clientId,
+      location: { longitude: 37.6176, latitude: 55.7558 },
+      observedAt: new Date(Date.now() - 60_000),
+    }).returning({ id: observations.id });
+    if (!observation) throw new Error('Failed to create vote fixture');
+    await database.db.insert(votes).values({
+      observationId: observation.id,
+      clientId: otherClientId,
+      value: 'reject',
+    });
+
+    const app = buildApp({ animalService, clientService, observationService });
+    const vote = (value: 'confirm' | 'reject' | null) => app.inject({
+      method: 'PUT',
+      url: `/api/v1/observations/${observation.id}/vote`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { value },
+    });
+    try {
+      for (const expected of [
+        { value: 'confirm' as const, confirm: 1, reject: 1 },
+        { value: 'confirm' as const, confirm: 1, reject: 1 },
+        { value: 'reject' as const, confirm: 0, reject: 2 },
+        { value: null, confirm: 0, reject: 1 },
+        { value: null, confirm: 0, reject: 1 },
+      ]) {
+        const response = await vote(expected.value);
+        expect(response.statusCode).toBe(200);
+        expect(response.headers['cache-control']).toBe('private, no-store');
+        expect(response.json()).toMatchObject({
+          data: {
+            id: observation.id,
+            votes: { confirm: expected.confirm, reject: expected.reject },
+            userVote: expected.value,
+          },
+        });
+      }
+
+      expect(await database.db.select({
+        clientId: votes.clientId,
+        value: votes.value,
+      }).from(votes)).toEqual([{ clientId: otherClientId, value: 'reject' }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('serializes parallel voting and keeps one vote per client', async () => {
+    const { clientId, token } = await seedAuthenticatedClient();
+    const [observation] = await database.db.insert(observations).values({
+      animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+      clientId,
+      location: { longitude: 37.6176, latitude: 55.7558 },
+      observedAt: new Date(Date.now() - 60_000),
+    }).returning({ id: observations.id });
+    if (!observation) throw new Error('Failed to create concurrent vote fixture');
+
+    const app = buildApp({ animalService, clientService, observationService });
+    try {
+      const repeated = await Promise.all(Array.from({ length: 8 }, () => app.inject({
+        method: 'PUT',
+        url: `/api/v1/observations/${observation.id}/vote`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { value: 'confirm' },
+      })));
+      expect(repeated.every((response) => response.statusCode === 200)).toBe(true);
+      expect(repeated.every((response) => {
+        const body = response.json<{
+          data: { votes: { confirm: number; reject: number }; userVote: string | null };
+        }>();
+        return body.data.votes.confirm === 1
+          && body.data.votes.reject === 0
+          && body.data.userVote === 'confirm';
+      })).toBe(true);
+      expect(await database.db.select({ value: count() }).from(votes)).toEqual([{ value: 1 }]);
+
+      await database.db.delete(votes).where(eq(votes.observationId, observation.id));
+      const voters = await Promise.all(Array.from({ length: 12 }, async (_, index) => {
+        const voterToken = `${String(index).padStart(2, '0')}${'v'.repeat(41)}`;
+        return seedAuthenticatedClient(voterToken);
+      }));
+      const parallel = await Promise.all(voters.map(({ token: voterToken }) => app.inject({
+        method: 'PUT',
+        url: `/api/v1/observations/${observation.id}/vote`,
+        headers: { authorization: `Bearer ${voterToken}` },
+        payload: { value: 'confirm' },
+      })));
+      expect(parallel.every((response) => response.statusCode === 200)).toBe(true);
+      const returnedCounts = parallel.map((response) => response.json<{
+        data: { votes: { confirm: number }; userVote: string | null };
+      }>().data.votes.confirm).sort((left, right) => left - right);
+      expect(returnedCounts).toEqual(Array.from({ length: 12 }, (_, index) => index + 1));
+      expect(parallel.every((response) => response.json<{
+        data: { userVote: string | null };
+      }>().data.userVote === 'confirm')).toBe(true);
+      expect(await database.db.select({ value: count() }).from(votes)).toEqual([{ value: 12 }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('hides unknown, deleted and expired observations uniformly when voting', async () => {
+    const { clientId, token } = await seedAuthenticatedClient();
+    const now = Date.now();
+    const [expired, deleted] = await database.db.insert(observations).values([
+      {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        clientId,
+        location: { longitude: 30, latitude: 50 },
+        observedAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+      },
+      {
+        animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+        clientId,
+        location: { longitude: 31, latitude: 51 },
+        observedAt: new Date(now - 60_000),
+      },
+    ]).returning({ id: observations.id });
+    if (!expired || !deleted) throw new Error('Failed to create unavailable vote fixtures');
+    await database.db.delete(observations).where(eq(observations.id, deleted.id));
+
+    const app = buildApp({ animalService, clientService, observationService });
+    try {
+      for (const id of [randomUUID(), deleted.id, expired.id]) {
+        const response = await app.inject({
+          method: 'PUT',
+          url: `/api/v1/observations/${id}/vote`,
+          headers: { authorization: `Bearer ${token}` },
+          payload: { value: 'confirm' },
+        });
+        expect(response.statusCode).toBe(404);
+        expect(response.json()).toEqual({
+          error: { code: 'OBSERVATION_NOT_FOUND', message: 'Observation not found' },
+        });
+      }
+      expect(await database.db.select({ value: count() }).from(votes)).toEqual([{ value: 0 }]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects new descriptions when disabled but allows a successful idempotent replay', async () => {
     const { token } = await seedAuthenticatedClient();
     const idempotencyKey = randomUUID();

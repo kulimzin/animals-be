@@ -44,6 +44,10 @@ const createObservationHeadersSchema = z.object({
   'idempotency-key': z.uuid(),
 });
 
+const voteObservationBodySchema = z.object({
+  value: z.enum(['confirm', 'reject']).nullable(),
+}).strict();
+
 const animalIdsSchema = z.string().min(1).transform((value, context) => {
   const animalIds = value.split(',').map((animalId) => animalId.trim());
   if (animalIds.length < 1 || animalIds.length > 5) {
@@ -192,6 +196,32 @@ export function registerObservationRoutes(
   }, async (request, reply) => {
     if (!request.client) throw new Error('Authenticated client is missing');
     const observation = await observationService.getDetails(request.params.id, request.client.id);
+    return reply.header('Cache-Control', 'private, no-store')
+      .send({ data: toObservationDetailsDto(observation) });
+  });
+
+  app.withTypeProvider<ZodTypeProvider>().put('/observations/:id/vote', {
+    schema: {
+      operationId: 'voteObservation',
+      summary: 'Set or remove the current client vote for an observation',
+      tags: ['observations'],
+      security: [{ bearerAuth: [] }],
+      params: z.object({ id: z.uuid() }),
+      body: voteObservationBodySchema,
+      response: {
+        200: observationDetailsResponseSchema,
+        400: errorResponseSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    if (!request.client) throw new Error('Authenticated client is missing');
+    const observation = await observationService.vote(
+      request.params.id,
+      request.client.id,
+      request.body.value,
+    );
     return reply.header('Cache-Control', 'private, no-store')
       .send({ data: toObservationDetailsDto(observation) });
   });

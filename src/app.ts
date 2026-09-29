@@ -62,6 +62,7 @@ const openApiTransform: SwaggerTransformObject = (document) => {
   for (const [path, method, status] of [
     ['/api/v1/observations', 'post', '201'],
     ['/api/v1/observations/{id}', 'get', '200'],
+    ['/api/v1/observations/{id}/vote', 'put', '200'],
   ] as const) {
     const response = openApi.paths?.[path]?.[method]?.responses?.[status];
     if (response && !('$ref' in response)) {

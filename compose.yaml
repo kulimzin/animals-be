@@ -1,0 +1,37 @@
+name: animals-backend
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: animals
+      POSTGRES_DB: animals
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    ports:
+      - '127.0.0.1:5433:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U animals -d animals']
+      interval: 2s
+      timeout: 5s
+      retries: 20
+  db-test:
+    image: postgis/postgis:17-3.5
+    platform: linux/amd64
+    profiles: [test]
+    environment:
+      POSTGRES_USER: animals_test
+      POSTGRES_DB: animals_test
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-}
+    ports:
+      - '127.0.0.1:5434:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U animals_test -d animals_test']
+      interval: 2s
+      timeout: 5s
+      retries: 20
+volumes:
+  db-data:

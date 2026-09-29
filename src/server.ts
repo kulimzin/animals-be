@@ -7,6 +7,8 @@ import { createAnimalService } from './modules/animals/animal-service.js';
 import { createPostgresClientRepository } from './modules/clients/client-repository.js';
 import { createClientService } from './modules/clients/client-service.js';
 import { createPublicConfig } from './modules/config/public-config.js';
+import { createPostgresDataLifecycleRepository } from './modules/data-lifecycle/data-lifecycle-repository.js';
+import { createDataLifecycleScheduler } from './modules/data-lifecycle/data-lifecycle-scheduler.js';
 import { createPostgresObservationRepository } from './modules/observations/observation-repository.js';
 import { createObservationService } from './modules/observations/observation-service.js';
 
@@ -25,11 +27,23 @@ async function main() {
       redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
     },
   });
+  const dataLifecycleScheduler = createDataLifecycleScheduler(
+    createPostgresDataLifecycleRepository(db),
+    {
+      onSuccess(result) {
+        app.log.info({ deleted: result }, 'Data lifecycle cleanup completed');
+      },
+      onError() {
+        app.log.error('Data lifecycle cleanup failed');
+      },
+    },
+  );
 
   pool.on('error', () => {
     app.log.error('Idle database connection failed');
   });
   app.addHook('onClose', async () => {
+    await dataLifecycleScheduler.stop();
     await pool.end();
   });
 
@@ -56,7 +70,10 @@ async function main() {
   try {
     await db.execute(sql`select postgis_version()`);
     if (!isClosing) {
-      await app.listen({ host: environment.HOST, port: environment.PORT });
+      await dataLifecycleScheduler.start();
+      if (!isClosing) {
+        await app.listen({ host: environment.HOST, port: environment.PORT });
+      }
     }
   } catch {
     app.log.error('Application startup failed; check database availability, PostGIS and listen settings');

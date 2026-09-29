@@ -20,6 +20,7 @@ import { createPostgresClientRepository } from '../../src/modules/clients/client
 import { createClientService } from '../../src/modules/clients/client-service.js';
 import { createClientAuthenticationHook } from '../../src/modules/clients/http.js';
 import { createPublicConfig } from '../../src/modules/config/public-config.js';
+import { createPostgresDataLifecycleRepository } from '../../src/modules/data-lifecycle/data-lifecycle-repository.js';
 import { createPostgresObservationRepository } from '../../src/modules/observations/observation-repository.js';
 import { createObservationService } from '../../src/modules/observations/observation-service.js';
 
@@ -42,6 +43,7 @@ const database = createDatabase(connectionString);
 const animalService = createAnimalService(createPostgresAnimalRepository(database.db));
 const clientService = createClientService(createPostgresClientRepository(database.db));
 const observationService = createObservationService(createPostgresObservationRepository(database.db));
+const dataLifecycleRepository = createPostgresDataLifecycleRepository(database.db);
 let upgradeResult: {
   animalId: string;
   iconColumnCount: number;
@@ -1195,6 +1197,175 @@ describe('database migrations and constraints', () => {
     } finally {
       await app.close();
     }
+  });
+
+  it('cleans expired data while preserving current records and is safe to repeat', async () => {
+    const references = await seedReferences();
+    const now = Date.now();
+    const [expiredObservation, currentObservation] = await database.db.insert(observations).values([
+      {
+        animalId: references.animalId,
+        clientId: references.authorId,
+        location: { longitude: 37.6, latitude: 55.7 },
+        observedAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+      },
+      {
+        animalId: references.animalId,
+        clientId: references.authorId,
+        location: { longitude: 37.7, latitude: 55.8 },
+        observedAt: new Date(now - 29 * 24 * 60 * 60 * 1000),
+      },
+    ]).returning({ id: observations.id });
+    if (!expiredObservation || !currentObservation) {
+      throw new Error('Failed to create lifecycle observation fixtures');
+    }
+    await database.db.insert(votes).values([
+      {
+        observationId: expiredObservation.id,
+        clientId: references.voterId,
+        value: 'confirm',
+      },
+      {
+        observationId: currentObservation.id,
+        clientId: references.voterId,
+        value: 'reject',
+      },
+    ]);
+
+    const expiredIdempotencyCreatedAt = new Date(now - 25 * 60 * 60 * 1000);
+    const currentIdempotencyCreatedAt = new Date(now - 23 * 60 * 60 * 1000);
+    await database.db.insert(observationIdempotency).values([
+      {
+        clientId: references.authorId,
+        idempotencyKey: randomUUID(),
+        requestHash: 'c'.repeat(64),
+        observationId: expiredObservation.id,
+        createdAt: expiredIdempotencyCreatedAt,
+        expiresAt: new Date(expiredIdempotencyCreatedAt.getTime() + 24 * 60 * 60 * 1000),
+      },
+      {
+        clientId: references.authorId,
+        idempotencyKey: randomUUID(),
+        requestHash: 'd'.repeat(64),
+        observationId: currentObservation.id,
+        createdAt: currentIdempotencyCreatedAt,
+        expiresAt: new Date(currentIdempotencyCreatedAt.getTime() + 24 * 60 * 60 * 1000),
+      },
+    ]);
+    await database.db.insert(publicationEvents).values([
+      {
+        clientId: references.authorId,
+        publishedAt: new Date(now - 25 * 60 * 60 * 1000),
+      },
+      {
+        clientId: references.authorId,
+        publishedAt: new Date(now - 23 * 60 * 60 * 1000),
+      },
+    ]);
+    await database.db.insert(clientIssuanceEvents).values([
+      {
+        ipHash: 'e'.repeat(64),
+        wasIssued: true,
+        createdAt: new Date(now - 25 * 60 * 60 * 1000),
+        expiresAt: new Date(now - 60 * 60 * 1000),
+      },
+      {
+        ipHash: 'f'.repeat(64),
+        wasIssued: true,
+        createdAt: new Date(now - 60 * 60 * 1000),
+        expiresAt: new Date(now + 60 * 60 * 1000),
+      },
+    ]);
+
+    await expect(dataLifecycleRepository.cleanup()).resolves.toEqual({
+      observations: 1,
+      idempotencyRecords: 1,
+      publicationEvents: 1,
+      clientIssuanceEvents: 1,
+    });
+    expect(await database.db.select({ value: count() }).from(observations))
+      .toEqual([{ value: 1 }]);
+    expect(await database.db.select({ value: count() }).from(votes))
+      .toEqual([{ value: 1 }]);
+    expect(await database.db.select({ value: count() }).from(observationIdempotency))
+      .toEqual([{ value: 1 }]);
+    expect(await database.db.select({ value: count() }).from(publicationEvents))
+      .toEqual([{ value: 1 }]);
+    expect(await database.db.select({ value: count() }).from(clientIssuanceEvents))
+      .toEqual([{ value: 1 }]);
+    expect(await database.db.select({ id: observations.id }).from(observations))
+      .toEqual([{ id: currentObservation.id }]);
+
+    await expect(dataLifecycleRepository.cleanup()).resolves.toEqual({
+      observations: 0,
+      idempotencyRecords: 0,
+      publicationEvents: 0,
+      clientIssuanceEvents: 0,
+    });
+  });
+
+  it('allows concurrent lifecycle cleanup runs without duplicate effects', async () => {
+    const references = await seedReferences();
+    const now = Date.now();
+    const expiredObservations = await database.db.insert(observations).values(
+      Array.from({ length: 2 }, (_, index) => ({
+        animalId: references.animalId,
+        clientId: references.authorId,
+        location: { longitude: 37.6 + index / 10, latitude: 55.7 },
+        observedAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(now - 31 * 24 * 60 * 60 * 1000),
+      })),
+    ).returning({ id: observations.id });
+    const idempotencyCreatedAt = new Date(now - 25 * 60 * 60 * 1000);
+    await database.db.insert(observationIdempotency).values(expiredObservations.map((observation) => ({
+      clientId: references.authorId,
+      idempotencyKey: randomUUID(),
+      requestHash: randomUUID().replaceAll('-', '').repeat(2),
+      observationId: observation.id,
+      createdAt: idempotencyCreatedAt,
+      expiresAt: new Date(idempotencyCreatedAt.getTime() + 24 * 60 * 60 * 1000),
+    })));
+    await database.db.insert(publicationEvents).values(Array.from({ length: 2 }, () => ({
+      clientId: references.authorId,
+      publishedAt: new Date(now - 25 * 60 * 60 * 1000),
+    })));
+    await database.db.insert(clientIssuanceEvents).values(Array.from({ length: 2 }, (_, index) => ({
+      ipHash: String(index + 1).repeat(64),
+      wasIssued: true,
+      createdAt: new Date(now - 25 * 60 * 60 * 1000),
+      expiresAt: new Date(now - 60 * 60 * 1000),
+    })));
+
+    const results = await Promise.all([
+      dataLifecycleRepository.cleanup(),
+      dataLifecycleRepository.cleanup(),
+    ]);
+    const total = results.reduce((sum, result) => ({
+      observations: sum.observations + result.observations,
+      idempotencyRecords: sum.idempotencyRecords + result.idempotencyRecords,
+      publicationEvents: sum.publicationEvents + result.publicationEvents,
+      clientIssuanceEvents: sum.clientIssuanceEvents + result.clientIssuanceEvents,
+    }), {
+      observations: 0,
+      idempotencyRecords: 0,
+      publicationEvents: 0,
+      clientIssuanceEvents: 0,
+    });
+    expect(total).toEqual({
+      observations: 2,
+      idempotencyRecords: 2,
+      publicationEvents: 2,
+      clientIssuanceEvents: 2,
+    });
+    expect(await database.db.select({ value: count() }).from(observations))
+      .toEqual([{ value: 0 }]);
+    expect(await database.db.select({ value: count() }).from(observationIdempotency))
+      .toEqual([{ value: 0 }]);
+    expect(await database.db.select({ value: count() }).from(publicationEvents))
+      .toEqual([{ value: 0 }]);
+    expect(await database.db.select({ value: count() }).from(clientIssuanceEvents))
+      .toEqual([{ value: 0 }]);
   });
 
   it('stores WGS 84 points in longitude-latitude order and creates a GiST index', async () => {

@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ApiError } from '../../shared/http/api-error.js';
+import { createPublicConfig } from '../config/public-config.js';
+import type { PublicConfig } from '../config/public-config.js';
 import type {
   CreateObservationInput,
   ObservationCursor,
@@ -7,7 +9,10 @@ import type {
   ObservationRepository,
 } from './observation-repository.js';
 
-type ObservationDraft = Omit<CreateObservationInput, 'clientId' | 'requestHash'>;
+type ObservationDraft = Omit<
+  CreateObservationInput,
+  'clientId' | 'descriptionsEnabled' | 'requestHash'
+>;
 
 export type ObservationService = ReturnType<typeof createObservationService>;
 
@@ -51,12 +56,16 @@ function decodeCursor(value: string): ObservationCursor {
   }
 }
 
-export function createObservationService(repository: ObservationRepository) {
+export function createObservationService(
+  repository: ObservationRepository,
+  publicConfig: PublicConfig = createPublicConfig(true),
+) {
   return {
     async create(clientId: string, draft: ObservationDraft) {
       const result = await repository.create({
         ...draft,
         clientId,
+        descriptionsEnabled: publicConfig.descriptionsEnabled,
         requestHash: hashObservation(draft),
       });
       if (result.status === 'animal-not-available') {
@@ -64,6 +73,9 @@ export function createObservationService(repository: ObservationRepository) {
       }
       if (result.status === 'idempotency-conflict') {
         throw new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'Idempotency key was already used for another request');
+      }
+      if (result.status === 'description-disabled') {
+        throw new ApiError(422, 'DESCRIPTION_DISABLED', 'Observation descriptions are disabled');
       }
       if (result.status === 'observed-at-invalid') {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', [{

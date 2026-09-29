@@ -19,6 +19,8 @@ const environmentSchema = z.object({
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  DESCRIPTIONS_ENABLED: z.enum(['true', 'false']).default('true')
+    .transform((value) => value === 'true'),
   TRUST_PROXY: trustedProxies,
   DATABASE_URL: databaseUrl,
 });

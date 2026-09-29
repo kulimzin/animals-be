@@ -7,6 +7,7 @@ import type {
   ObservationRepository,
 } from '../../src/modules/observations/observation-repository.js';
 import { createObservationService } from '../../src/modules/observations/observation-service.js';
+import { createPublicConfig } from '../../src/modules/config/public-config.js';
 
 const observation: ObservationRecord = {
   id: '6ee21c62-18a9-4e82-a487-adcf49ce747d',
@@ -55,10 +56,12 @@ describe('observation service', () => {
     expect(inputs).toHaveLength(2);
     expect(inputs[0]?.requestHash).toBe(inputs[1]?.requestHash);
     expect(inputs[0]?.clientId).toBe('client-id');
+    expect(inputs[0]?.descriptionsEnabled).toBe(true);
   });
 
   it.each([
     ['animal-not-available', 422, 'ANIMAL_NOT_AVAILABLE'],
+    ['description-disabled', 422, 'DESCRIPTION_DISABLED'],
     ['idempotency-conflict', 409, 'IDEMPOTENCY_KEY_REUSED'],
     ['observed-at-invalid', 400, 'VALIDATION_ERROR'],
   ] as const)('maps %s to a stable API error', async (status, statusCode, code) => {
@@ -70,6 +73,20 @@ describe('observation service', () => {
       statusCode,
       code,
     });
+  });
+
+  it('passes the disabled descriptions setting to the transactional repository', async () => {
+    const inputs: CreateObservationInput[] = [];
+    const service = createObservationService(createRepository({
+      create: (input) => {
+        inputs.push(input);
+        return Promise.resolve({ status: 'description-disabled' });
+      },
+    }), createPublicConfig(false));
+
+    await expect(service.create('client-id', { ...draft, note: 'Описание' }))
+      .rejects.toMatchObject<ApiError>({ statusCode: 422, code: 'DESCRIPTION_DISABLED' });
+    expect(inputs[0]?.descriptionsEnabled).toBe(false);
   });
 
   it('deduplicates filters and round-trips an opaque cursor', async () => {

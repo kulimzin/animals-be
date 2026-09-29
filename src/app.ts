@@ -12,11 +12,14 @@ import type { AnimalService } from './modules/animals/animal-service.js';
 import { registerAnimalRoutes } from './modules/animals/http.js';
 import type { ClientService } from './modules/clients/client-service.js';
 import { registerClientRoutes } from './modules/clients/http.js';
+import type { ObservationService } from './modules/observations/observation-service.js';
+import { registerObservationRoutes } from './modules/observations/http.js';
 import { registerErrorHandlers } from './shared/http/error-handler.js';
 
 type BuildAppOptions = {
   animalService: AnimalService;
   clientService: ClientService;
+  observationService: ObservationService;
   logger?: FastifyServerOptions['logger'];
   trustProxy?: string[] | undefined;
 };
@@ -54,7 +57,13 @@ const openApiTransform: SwaggerTransformObject = (document) => {
   return openApi;
 };
 
-export function buildApp({ animalService, clientService, logger = false, trustProxy }: BuildAppOptions) {
+export function buildApp({
+  animalService,
+  clientService,
+  observationService,
+  logger = false,
+  trustProxy,
+}: BuildAppOptions) {
   const app = Fastify({
     logger,
     trustProxy: trustProxy ?? false,
@@ -86,6 +95,7 @@ export function buildApp({ animalService, clientService, logger = false, trustPr
       tags: [
         { name: 'animals', description: 'Animal directory' },
         { name: 'clients', description: 'Anonymous browser clients' },
+        { name: 'observations', description: 'Animal observations' },
       ],
     },
     transform: jsonSchemaTransform,
@@ -95,6 +105,7 @@ export function buildApp({ animalService, clientService, logger = false, trustPr
   void app.register((routesApp, _options, done) => {
     registerAnimalRoutes(routesApp, animalService);
     registerClientRoutes(routesApp, clientService);
+    registerObservationRoutes(routesApp, observationService, clientService);
     routesApp.get('/openapi.json', {
       schema: { hide: true },
     }, async (_request, reply) => reply.send(routesApp.swagger()));

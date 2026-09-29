@@ -11,3 +11,5 @@ export function createDatabase(connectionString: string) {
   });
   return { pool, db: drizzle(pool, { schema }) };
 }
+
+export type Database = ReturnType<typeof createDatabase>['db'];

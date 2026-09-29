@@ -8,6 +8,13 @@
       "when": 1790677477317,
       "tag": "0000_natural_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790696030990,
+      "tag": "0001_pink_loners",
+      "breakpoints": true
     }
   ]
 }

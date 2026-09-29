@@ -1,12 +1,21 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
+import type { AnimalService } from '../../src/modules/animals/animal-service.js';
 import type { ClientService } from '../../src/modules/clients/client-service.js';
 
+const animalService: AnimalService = {
+  listAvailableAnimals: () => Promise.resolve([{
+    id: '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4',
+    slug: 'tiger',
+    nameRu: 'Тигр',
+    nameEn: 'Tiger',
+  }]),
+};
 const clientService: ClientService = {
   issueClient: () => Promise.resolve({ status: 'issued', token: 'a'.repeat(43) }),
   authenticateToken: () => Promise.resolve(undefined),
 };
-const app = buildApp({ clientService });
+const app = buildApp({ animalService, clientService });
 afterAll(async () => { await app.close(); });
 
 describe('application foundation', () => {
@@ -23,11 +32,15 @@ describe('application foundation', () => {
     expect(response.statusCode).toBe(200);
     const document = response.json<{
       openapi: string;
-      paths: Record<string, { post?: { operationId?: string; responses?: Record<string, unknown> } }>;
+      paths: Record<string, {
+        get?: { operationId?: string };
+        post?: { operationId?: string; responses?: Record<string, unknown> };
+      }>;
     }>();
     expect(document).toMatchObject({
       openapi: '3.1.0',
       paths: {
+        '/animals': { get: { operationId: 'listAnimals' } },
         '/clients': { post: { operationId: 'createClient' } },
       },
     });
@@ -35,6 +48,19 @@ describe('application foundation', () => {
       headers: {
         'Retry-After': { schema: { type: 'integer', minimum: 1 } },
       },
+    });
+  });
+
+  it('returns both localized animal names and a stable icon slug', async () => {
+    const response = await app.inject({ method: 'GET', url: '/animals' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: [{
+        id: '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4',
+        slug: 'tiger',
+        name: { ru: 'Тигр', en: 'Tiger' },
+      }],
     });
   });
 

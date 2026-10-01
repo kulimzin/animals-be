@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import { ApiError } from '../../src/shared/http/api-error.js';
+import type { ErrorResponse } from '../../src/shared/http/schemas.js';
 import type { AnimalService } from '../../src/modules/animals/animal-service.js';
 import type { ClientService } from '../../src/modules/clients/client-service.js';
 import type { ObservationService } from '../../src/modules/observations/observation-service.js';
@@ -54,9 +55,9 @@ describe('application foundation', () => {
   it('starts the HTTP pipeline without opening a port or requiring a database', async () => {
     const response = await app.inject({ method: 'GET', url: '/missing' });
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toEqual({
-      error: { code: 'NOT_FOUND', message: 'Route not found' },
-    });
+    const body = response.json<ErrorResponse>();
+    expect(body.error).toEqual({ code: 'NOT_FOUND', message: 'Route not found' });
+    expect(body.requestId).not.toHaveLength(0);
   });
 
   it('generates OpenAPI from the Zod route schemas', async () => {
@@ -68,18 +69,42 @@ describe('application foundation', () => {
         get?: {
           operationId?: string;
           parameters?: Array<{ name: string; in: string; required?: boolean }>;
-          responses?: Record<string, unknown>;
+          responses?: Record<string, {
+            content?: Record<string, {
+              schema?: {
+                properties?: Record<string, unknown>;
+                required?: string[];
+              };
+            }>;
+            headers?: Record<string, unknown>;
+          }>;
           security?: Array<Record<string, unknown>>;
         };
         post?: {
           operationId?: string;
           requestBody?: unknown;
-          responses?: Record<string, unknown>;
+          responses?: Record<string, {
+            content?: Record<string, {
+              schema?: {
+                properties?: Record<string, unknown>;
+                required?: string[];
+              };
+            }>;
+            headers?: Record<string, unknown>;
+          }>;
           security?: Array<Record<string, unknown>>;
         };
         put?: {
           operationId?: string;
-          responses?: Record<string, unknown>;
+          responses?: Record<string, {
+            content?: Record<string, {
+              schema?: {
+                properties?: Record<string, unknown>;
+                required?: string[];
+              };
+            }>;
+            headers?: Record<string, unknown>;
+          }>;
           security?: Array<Record<string, unknown>>;
         };
       }>;
@@ -103,6 +128,15 @@ describe('application foundation', () => {
         'Retry-After': { schema: { type: 'integer', minimum: 1 } },
       },
     });
+    const payloadTooLargeSchema = document.paths['/api/v1/clients']?.post
+      ?.responses?.['413']?.content?.['application/json']?.schema;
+    expect(payloadTooLargeSchema?.required).toContain('error');
+    expect(payloadTooLargeSchema?.required).toContain('requestId');
+    expect(payloadTooLargeSchema?.properties?.requestId)
+      .toEqual({ type: 'string', minLength: 1 });
+    expect(document.paths['/api/v1/observations']?.post?.responses?.['413']).toBeDefined();
+    expect(document.paths['/api/v1/observations/{id}/vote']?.put?.responses?.['413'])
+      .toBeDefined();
     expect(document.paths['/api/v1/clients']?.post?.security).toBeUndefined();
     expect(document.paths['/api/v1/animals']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/config']?.get?.security).toEqual([{ bearerAuth: [] }]);
@@ -216,14 +250,14 @@ describe('application foundation', () => {
       expect(response.statusCode).toBe(429);
       expect(response.headers['cache-control']).toBe('private, no-store');
       expect(response.headers['retry-after']).toBe('30');
-      expect(response.json()).toEqual({
-        error: {
-          code: 'RATE_LIMITED',
-          message: 'Observation publication rate limit exceeded',
-          retryAfterSeconds: 30,
-          availableAt: '2026-09-29T07:16:00.000Z',
-        },
+      const body = response.json<ErrorResponse>();
+      expect(body.error).toEqual({
+        code: 'RATE_LIMITED',
+        message: 'Observation publication rate limit exceeded',
+        retryAfterSeconds: 30,
+        availableAt: '2026-09-29T07:16:00.000Z',
       });
+      expect(body.requestId).not.toHaveLength(0);
     } finally {
       await rateLimitedApp.close();
     }
@@ -300,7 +334,9 @@ describe('application foundation', () => {
       },
     });
     expect(invalidCreate.statusCode).toBe(400);
-    expect(invalidCreate.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+    const invalidCreateBody = invalidCreate.json<ErrorResponse>();
+    expect(invalidCreateBody.error.code).toBe('VALIDATION_ERROR');
+    expect(invalidCreateBody.requestId).not.toHaveLength(0);
 
     for (const payload of [{}, { value: 'maybe' }, { value: null, extra: true }]) {
       const invalidVote = await app.inject({
@@ -358,9 +394,51 @@ describe('application foundation', () => {
       payload: '{',
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({
-      error: { code: 'REQUEST_INVALID', message: 'Request is invalid' },
+    const body = response.json<ErrorResponse>();
+    expect(body.error).toEqual({ code: 'REQUEST_INVALID', message: 'Request is invalid' });
+    expect(body.requestId).not.toHaveLength(0);
+  });
+
+  it('rejects JSON bodies larger than 16 KiB with a stable error', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/clients',
+      payload: { padding: 'x'.repeat(16 * 1024) },
     });
+
+    expect(response.statusCode).toBe(413);
+    const body = response.json<ErrorResponse>();
+    expect(body.error).toEqual({
+      code: 'PAYLOAD_TOO_LARGE',
+      message: 'Request body exceeds the 16 KiB limit',
+    });
+    expect(body.requestId).not.toHaveLength(0);
+  });
+
+  it('returns an opaque request id without exposing internal error details', async () => {
+    const failingApp = buildApp({
+      animalService,
+      clientService,
+      observationService: {
+        ...observationService,
+        getDetails: () => Promise.reject(new Error('database password leaked')),
+      },
+    });
+    try {
+      const response = await failingApp.inject({
+        method: 'GET',
+        url: `/api/v1/observations/${observation.id}`,
+        headers: authorization,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json<ErrorResponse>();
+      expect(body.error).toEqual({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+      expect(body.requestId).not.toHaveLength(0);
+      expect(response.body).not.toContain('database password leaked');
+    } finally {
+      await failingApp.close();
+    }
   });
 
   it('keeps client issuance public and protects every other API route', async () => {
@@ -376,7 +454,9 @@ describe('application foundation', () => {
       const missing = await app.inject({ method: 'GET', url });
       expect(missing.statusCode).toBe(401);
       expect(missing.headers['www-authenticate']).toBe('Bearer');
-      expect(missing.json()).toMatchObject({ error: { code: 'CLIENT_TOKEN_REQUIRED' } });
+      const missingBody = missing.json<ErrorResponse>();
+      expect(missingBody.error.code).toBe('CLIENT_TOKEN_REQUIRED');
+      expect(missingBody.requestId).not.toHaveLength(0);
 
       const invalid = await app.inject({
         method: 'GET',

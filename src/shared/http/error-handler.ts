@@ -5,6 +5,13 @@ import {
 } from 'fastify-type-provider-zod';
 import { ApiError } from './api-error.js';
 
+function readErrorProperty(error: unknown, property: 'code' | 'statusCode') {
+  if (typeof error !== 'object' || error === null) return undefined;
+  if (property === 'code' && 'code' in error) return error.code;
+  if (property === 'statusCode' && 'statusCode' in error) return error.statusCode;
+  return undefined;
+}
+
 export function registerErrorHandlers(app: FastifyInstance) {
   app.setErrorHandler((error, request, reply) => {
     if (hasZodFastifySchemaValidationErrors(error)) {
@@ -17,6 +24,7 @@ export function registerErrorHandlers(app: FastifyInstance) {
             message: issue.message ?? 'Invalid value',
           })),
         },
+        requestId: request.id,
       });
     }
 
@@ -32,18 +40,29 @@ export function registerErrorHandlers(app: FastifyInstance) {
             availableAt: error.rateLimit.availableAt.toISOString(),
           } : {}),
         },
+        requestId: request.id,
       });
     }
 
-    const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
-      ? error.statusCode
-      : undefined;
+    const statusCode = readErrorProperty(error, 'statusCode');
+    const errorCode = readErrorProperty(error, 'code');
+    if (statusCode === 413 || errorCode === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+      return reply.status(413).send({
+        error: {
+          code: 'PAYLOAD_TOO_LARGE',
+          message: 'Request body exceeds the 16 KiB limit',
+        },
+        requestId: request.id,
+      });
+    }
+
     if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
       return reply.status(statusCode).send({
         error: {
           code: 'REQUEST_INVALID',
           message: 'Request is invalid',
         },
+        requestId: request.id,
       });
     }
 
@@ -55,13 +74,15 @@ export function registerErrorHandlers(app: FastifyInstance) {
           ? 'Response serialization failed'
           : 'Internal server error',
       },
+      requestId: request.id,
     });
   });
 
-  app.setNotFoundHandler((_request, reply) => reply.status(404).send({
+  app.setNotFoundHandler((request, reply) => reply.status(404).send({
     error: {
       code: 'NOT_FOUND',
       message: 'Route not found',
     },
+    requestId: request.id,
   }));
 }

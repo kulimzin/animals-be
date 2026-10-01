@@ -12,7 +12,9 @@ export const errorResponseSchema = z.object({
     retryAfterSeconds: z.number().int().positive().optional(),
     availableAt: z.iso.datetime().optional(),
   }),
+  requestId: z.string().min(1),
 });
+export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
 export function successResponseSchema<T extends z.ZodType>(data: T) {
   return z.object({ data });

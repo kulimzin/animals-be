@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { count, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
+import type { ErrorResponse } from '../../src/shared/http/schemas.js';
 import { createDatabase } from '../../src/infrastructure/database.js';
 import { applyMigrations } from '../../src/infrastructure/database/migrate.js';
 import {
@@ -173,6 +174,28 @@ describe('database migrations and constraints', () => {
     }
   });
 
+  it('rejects oversized JSON before side effects and returns a request id', async () => {
+    const app = buildApp({ animalService, clientService, observationService });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/clients',
+        payload: { padding: 'x'.repeat(16 * 1024) },
+      });
+
+      expect(response.statusCode).toBe(413);
+      const body = response.json<ErrorResponse>();
+      expect(body.error).toEqual({
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'Request body exceeds the 16 KiB limit',
+      });
+      expect(body.requestId).not.toHaveLength(0);
+      expect(await database.db.select({ value: count() }).from(clients)).toEqual([{ value: 0 }]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('authenticates a valid bearer token and returns stable credential errors', async () => {
     const app = buildApp({ animalService, clientService, observationService });
     app.get('/test/protected', {
@@ -191,7 +214,9 @@ describe('database migrations and constraints', () => {
       const missing = await app.inject({ method: 'GET', url: '/test/protected' });
       expect(missing.statusCode).toBe(401);
       expect(missing.headers['www-authenticate']).toBe('Bearer');
-      expect(missing.json()).toMatchObject({ error: { code: 'CLIENT_TOKEN_REQUIRED' } });
+      const missingBody = missing.json<ErrorResponse>();
+      expect(missingBody.error.code).toBe('CLIENT_TOKEN_REQUIRED');
+      expect(missingBody.requestId).not.toHaveLength(0);
 
       const invalid = await app.inject({
         method: 'GET',
@@ -796,9 +821,12 @@ describe('database migrations and constraints', () => {
           headers: { authorization: `Bearer ${token}` },
         });
         expect(missing.statusCode).toBe(404);
-        expect(missing.json()).toEqual({
-          error: { code: 'OBSERVATION_NOT_FOUND', message: 'Observation not found' },
+        const body = missing.json<ErrorResponse>();
+        expect(body.error).toEqual({
+          code: 'OBSERVATION_NOT_FOUND',
+          message: 'Observation not found',
         });
+        expect(body.requestId).not.toHaveLength(0);
       }
     } finally {
       await app.close();
@@ -942,9 +970,12 @@ describe('database migrations and constraints', () => {
           payload: { value: 'confirm' },
         });
         expect(response.statusCode).toBe(404);
-        expect(response.json()).toEqual({
-          error: { code: 'OBSERVATION_NOT_FOUND', message: 'Observation not found' },
+        const body = response.json<ErrorResponse>();
+        expect(body.error).toEqual({
+          code: 'OBSERVATION_NOT_FOUND',
+          message: 'Observation not found',
         });
+        expect(body.requestId).not.toHaveLength(0);
       }
       expect(await database.db.select({ value: count() }).from(votes)).toEqual([{ value: 0 }]);
     } finally {

@@ -161,6 +161,7 @@ export function registerObservationRoutes(
         400: errorResponseSchema,
         401: errorResponseSchema,
         409: errorResponseSchema,
+        413: errorResponseSchema,
         422: errorResponseSchema,
         429: errorResponseSchema,
       },
@@ -214,6 +215,7 @@ export function registerObservationRoutes(
         400: errorResponseSchema,
         401: errorResponseSchema,
         404: errorResponseSchema,
+        413: errorResponseSchema,
       },
     },
   }, async (request, reply) => {

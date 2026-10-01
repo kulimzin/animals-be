@@ -44,6 +44,8 @@ export function registerClientRoutes(app: FastifyInstance, clientService: Client
       tags: ['clients'],
       response: {
         201: createClientResponseSchema,
+        400: errorResponseSchema,
+        413: errorResponseSchema,
         429: errorResponseSchema,
       },
     },

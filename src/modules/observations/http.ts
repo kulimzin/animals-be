@@ -5,9 +5,9 @@ import { errorResponseSchema, successResponseSchema } from '../../shared/http/sc
 import { MAP_RESULT_LIMIT, NOTE_MAX_LENGTH } from '../config/public-config.js';
 import type { MapObservationRecord, ObservationDetailsRecord } from './observation-repository.js';
 import type { ObservationService } from './observation-service.js';
+import { LOCATION_LABEL_MAX_LENGTH } from './observation-text.js';
 
-const optionalText = (maximum: number) => z.string().max(maximum)
-  .refine((value) => value.trim().length > 0, 'Must not be blank')
+const optionalText = (maximum: number) => z.string().meta({ maxLength: maximum })
   .nullable()
   .optional();
 
@@ -36,7 +36,7 @@ const createObservationBodySchema = z.object({
   animalId: z.uuid(),
   location: locationSchema,
   observedAt: z.iso.datetime({ offset: true }),
-  locationLabel: optionalText(300),
+  locationLabel: optionalText(LOCATION_LABEL_MAX_LENGTH),
   note: optionalText(NOTE_MAX_LENGTH),
 }).strict();
 

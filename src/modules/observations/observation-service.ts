@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ApiError } from '../../shared/http/api-error.js';
+import type { ApiErrorDetail } from '../../shared/http/api-error.js';
 import { createPublicConfig } from '../config/public-config.js';
 import type { PublicConfig } from '../config/public-config.js';
 import type {
@@ -7,6 +8,11 @@ import type {
   ListObservationsInput,
   ObservationRepository,
 } from './observation-repository.js';
+import {
+  countUnicodeCodePoints,
+  LOCATION_LABEL_MAX_LENGTH,
+  normalizeOptionalText,
+} from './observation-text.js';
 
 type ObservationDraft = Omit<
   CreateObservationInput,
@@ -32,11 +38,35 @@ export function createObservationService(
 ) {
   return {
     async create(clientId: string, draft: ObservationDraft) {
-      const result = await repository.create({
+      const normalizedDraft = {
         ...draft,
+        locationLabel: normalizeOptionalText(draft.locationLabel),
+        note: normalizeOptionalText(draft.note),
+      };
+      const textErrors: ApiErrorDetail[] = [];
+      if (normalizedDraft.locationLabel
+        && countUnicodeCodePoints(normalizedDraft.locationLabel) > LOCATION_LABEL_MAX_LENGTH) {
+        textErrors.push({
+          path: '/body/locationLabel',
+          message: `Must contain at most ${LOCATION_LABEL_MAX_LENGTH} Unicode code points`,
+        });
+      }
+      if (normalizedDraft.note
+        && countUnicodeCodePoints(normalizedDraft.note) > publicConfig.noteMaxLength) {
+        textErrors.push({
+          path: '/body/note',
+          message: `Must contain at most ${publicConfig.noteMaxLength} Unicode code points`,
+        });
+      }
+      if (textErrors.length > 0) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', textErrors);
+      }
+
+      const result = await repository.create({
+        ...normalizedDraft,
         clientId,
         descriptionsEnabled: publicConfig.descriptionsEnabled,
-        requestHash: hashObservation(draft),
+        requestHash: hashObservation(normalizedDraft),
       });
       if (result.status === 'animal-not-available') {
         throw new ApiError(422, 'ANIMAL_NOT_AVAILABLE', 'Animal is not available for new observations');

@@ -401,6 +401,69 @@ describe('database migrations and constraints', () => {
     }
   });
 
+  it('normalizes optional text and enforces its Unicode code-point limits', async () => {
+    const firstClient = await seedAuthenticatedClient('d'.repeat(43));
+    const secondClient = await seedAuthenticatedClient('e'.repeat(43));
+    const app = buildApp({ animalService, clientService, observationService });
+    const payload = {
+      animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+      location: { longitude: 37.6176, latitude: 55.7558 },
+      observedAt: new Date(Date.now() - 60_000).toISOString(),
+    };
+    const create = (token: string, body: Record<string, unknown>) => app.inject({
+      method: 'POST',
+      url: '/api/v1/observations',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': randomUUID(),
+      },
+      payload: { ...payload, ...body },
+    });
+
+    try {
+      const normalized = await create(firstClient.token, {
+        locationLabel: '  Cafe\u0301  ',
+        note: ' \n\t ',
+      });
+      expect(normalized.statusCode).toBe(201);
+      expect(normalized.json()).toMatchObject({
+        data: {
+          location: { label: 'Caf\u00e9' },
+          note: null,
+        },
+      });
+
+      const atLimits = await create(secondClient.token, {
+        locationLabel: ` ${'📍'.repeat(300)} `,
+        note: ` ${'🐾'.repeat(200)} `,
+      });
+      expect(atLimits.statusCode).toBe(201);
+      expect(atLimits.json()).toMatchObject({
+        data: {
+          location: { label: '📍'.repeat(300) },
+          note: '🐾'.repeat(200),
+        },
+      });
+
+      const overlong = await create(secondClient.token, {
+        locationLabel: '📍'.repeat(301),
+        note: '🐾'.repeat(201),
+      });
+      expect(overlong.statusCode).toBe(400);
+      expect(overlong.json()).toMatchObject({
+        error: {
+          code: 'VALIDATION_ERROR',
+          details: [
+            { path: '/body/locationLabel' },
+            { path: '/body/note' },
+          ],
+        },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it('creates one observation for identical concurrent retries and rejects key reuse', async () => {
     const { clientId, token } = await seedAuthenticatedClient();
     const app = buildApp({ animalService, clientService, observationService });

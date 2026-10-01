@@ -72,6 +72,81 @@ describe('observation service', () => {
     expect(inputs[0]?.descriptionsEnabled).toBe(true);
   });
 
+  it('normalizes optional text before hashing and persistence', async () => {
+    const inputs: CreateObservationInput[] = [];
+    const service = createObservationService(createRepository({
+      create: (input) => {
+        inputs.push(input);
+        return Promise.resolve({ status: 'created', observation });
+      },
+    }));
+
+    await service.create('client-id', {
+      ...draft,
+      locationLabel: '  Cafe\u0301  ',
+      note: ' \n\t ',
+    });
+    await service.create('client-id', {
+      ...draft,
+      locationLabel: 'Caf\u00e9',
+      note: null,
+    });
+
+    expect(inputs).toHaveLength(2);
+    expect(inputs[0]).toMatchObject({ locationLabel: 'Caf\u00e9', note: null });
+    expect(inputs[0]?.requestHash).toBe(inputs[1]?.requestHash);
+  });
+
+  it('counts text limits by Unicode code points after normalization', async () => {
+    const inputs: CreateObservationInput[] = [];
+    const service = createObservationService(createRepository({
+      create: (input) => {
+        inputs.push(input);
+        return Promise.resolve({ status: 'created', observation });
+      },
+    }));
+
+    await service.create('client-id', {
+      ...draft,
+      locationLabel: ` ${'📍'.repeat(300)} `,
+      note: ` ${'🐾'.repeat(200)} `,
+    });
+
+    expect(inputs[0]).toMatchObject({
+      locationLabel: '📍'.repeat(300),
+      note: '🐾'.repeat(200),
+    });
+  });
+
+  it.each([
+    ['locationLabel', '📍'.repeat(301), '/body/locationLabel', 300],
+    ['note', '🐾'.repeat(201), '/body/note', 200],
+  ] as const)('rejects an overlong %s after normalization', async (
+    field,
+    value,
+    path,
+    maximum,
+  ) => {
+    let createCalls = 0;
+    const service = createObservationService(createRepository({
+      create: () => {
+        createCalls += 1;
+        return Promise.resolve({ status: 'created', observation });
+      },
+    }));
+
+    await expect(service.create('client-id', { ...draft, [field]: value }))
+      .rejects.toMatchObject<ApiError>({
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        details: [{
+          path,
+          message: `Must contain at most ${maximum} Unicode code points`,
+        }],
+      });
+    expect(createCalls).toBe(0);
+  });
+
   it.each([
     ['animal-not-available', 422, 'ANIMAL_NOT_AVAILABLE'],
     ['description-disabled', 422, 'DESCRIPTION_DISABLED'],

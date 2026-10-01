@@ -73,6 +73,7 @@ describe('application foundation', () => {
         };
         post?: {
           operationId?: string;
+          requestBody?: unknown;
           responses?: Record<string, unknown>;
           security?: Array<Record<string, unknown>>;
         };
@@ -107,6 +108,18 @@ describe('application foundation', () => {
     expect(document.paths['/api/v1/config']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations']?.post?.security).toEqual([{ bearerAuth: [] }]);
+    expect(document.paths['/api/v1/observations']?.post?.requestBody).toMatchObject({
+      content: {
+        'application/json': {
+          schema: {
+            properties: {
+              locationLabel: { anyOf: [{ type: 'string', maxLength: 300 }, { type: 'null' }] },
+              note: { anyOf: [{ type: 'string', maxLength: 200 }, { type: 'null' }] },
+            },
+          },
+        },
+      },
+    });
     expect(document.paths['/api/v1/observations/{id}']?.get?.security).toEqual([{ bearerAuth: [] }]);
     expect(document.paths['/api/v1/observations/{id}/vote']?.put?.security)
       .toEqual([{ bearerAuth: [] }]);

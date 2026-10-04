@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { errorResponseSchema, successResponseSchema } from '../../shared/http/schemas.js';
+import { errorResponseSchema } from '../../shared/http/schemas.js';
 import type { AnimalService } from './animal-service.js';
 
 const animalSchema = z.object({
@@ -13,7 +13,7 @@ const animalSchema = z.object({
   }),
 });
 
-const listAnimalsResponseSchema = successResponseSchema(z.array(animalSchema));
+const listAnimalsResponseSchema = z.object({ items: z.array(animalSchema) });
 
 export function registerAnimalRoutes(app: FastifyInstance, animalService: AnimalService) {
   app.withTypeProvider<ZodTypeProvider>().get('/animals', {
@@ -25,12 +25,14 @@ export function registerAnimalRoutes(app: FastifyInstance, animalService: Animal
       response: {
         200: listAnimalsResponseSchema,
         401: errorResponseSchema,
+        500: errorResponseSchema,
+        503: errorResponseSchema,
       },
     },
   }, async () => {
     const animals = await animalService.listAvailableAnimals();
     return {
-      data: animals.map((animal) => ({
+      items: animals.map((animal) => ({
         id: animal.id,
         slug: animal.slug,
         name: {

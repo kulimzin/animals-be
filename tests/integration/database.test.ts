@@ -161,14 +161,14 @@ describe('database migrations and constraints', () => {
 
       expect(response.statusCode).toBe(201);
       expect(response.headers['cache-control']).toBe('no-store');
-      const body = response.json<{ data: { token: string } }>();
-      expect(body.data.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      const body = response.json<{ token: string }>();
+      expect(body.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
       const storedClients = await database.db.select({ tokenHash: clients.tokenHash }).from(clients);
       expect(storedClients).toEqual([{
-        tokenHash: createHash('sha256').update(body.data.token).digest('hex'),
+        tokenHash: createHash('sha256').update(body.token).digest('hex'),
       }]);
-      expect(JSON.stringify(storedClients)).not.toContain(body.data.token);
+      expect(JSON.stringify(storedClients)).not.toContain(body.token);
     } finally {
       await app.close();
     }
@@ -209,7 +209,7 @@ describe('database migrations and constraints', () => {
         url: '/api/v1/clients',
         remoteAddress: '203.0.113.11',
       });
-      const token = issuance.json<{ data: { token: string } }>().data.token;
+      const token = issuance.json<{ token: string }>().token;
 
       const missing = await app.inject({ method: 'GET', url: '/test/protected' });
       expect(missing.statusCode).toBe(401);
@@ -254,7 +254,7 @@ describe('database migrations and constraints', () => {
       const limited = responses.find((response) => response.statusCode === 429);
       expect(limited?.headers['retry-after']).toBe('3600');
       expect(limited?.json()).toMatchObject({
-        error: { code: 'CLIENT_ISSUANCE_RATE_LIMITED' },
+        error: { code: 'RATE_LIMITED' },
       });
 
       const storedClients = await database.db.select().from(clients);
@@ -319,11 +319,11 @@ describe('database migrations and constraints', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json<{
-        data: Array<{ id: string; slug: string; name: { ru: string; en: string } }>;
+        items: Array<{ id: string; slug: string; name: { ru: string; en: string } }>;
       }>();
-      expect(body.data).toHaveLength(115);
-      expect(body.data.some((animal) => animal.slug === 'tiger')).toBe(false);
-      expect(body.data.find((animal) => animal.slug === 'wolf')).toMatchObject({
+      expect(body.items).toHaveLength(115);
+      expect(body.items.some((animal) => animal.slug === 'tiger')).toBe(false);
+      expect(body.items.find((animal) => animal.slug === 'wolf')).toMatchObject({
         id: '423e53fb-01c1-521b-8b29-6cccf5268618',
         name: { ru: 'Волк', en: 'Wolf' },
       });
@@ -371,19 +371,18 @@ describe('database migrations and constraints', () => {
         headers,
         payload: {
           animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
-          location: { longitude: 37.6176, latitude: 55.7558 },
+          location: { longitude: 37.6176, latitude: 55.7558, label: 'Парк Горького' },
           observedAt,
-          locationLabel: 'Парк Горького',
           note: null,
         },
       });
       expect(created.statusCode).toBe(201);
       expect(created.headers['cache-control']).toBe('private, no-store');
-      const createdBody = created.json<{ data: { id: string; observedAt: string } }>();
-      expect(createdBody.data.id).toMatch(/^[0-9a-f-]{36}$/);
+      const createdBody = created.json<{ item: { id: string; observedAt: string } }>();
+      expect(createdBody.item.id).toMatch(/^[0-9a-f-]{36}$/);
       expect(createdBody).toEqual({
-        data: {
-          id: createdBody.data.id,
+        item: {
+          id: createdBody.item.id,
           animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
           location: { longitude: 37.6176, latitude: 55.7558, label: 'Парк Горького' },
           observedAt,
@@ -406,8 +405,13 @@ describe('database migrations and constraints', () => {
           observedAt: new Date(Date.now() - 60_000).toISOString(),
         },
       });
-      expect(inactive.statusCode).toBe(422);
-      expect(inactive.json()).toMatchObject({ error: { code: 'ANIMAL_NOT_AVAILABLE' } });
+      expect(inactive.statusCode).toBe(400);
+      expect(inactive.json()).toMatchObject({
+        error: {
+          code: 'VALIDATION_ERROR',
+          fieldErrors: [{ field: 'animalId', code: 'ANIMAL_NOT_AVAILABLE' }],
+        },
+      });
 
       const tooOld = await app.inject({
         method: 'POST',
@@ -447,40 +451,40 @@ describe('database migrations and constraints', () => {
 
     try {
       const normalized = await create(firstClient.token, {
-        locationLabel: '  Cafe\u0301  ',
+        location: { ...payload.location, label: '  Cafe\u0301  ' },
         note: ' \n\t ',
       });
       expect(normalized.statusCode).toBe(201);
       expect(normalized.json()).toMatchObject({
-        data: {
+        item: {
           location: { label: 'Caf\u00e9' },
           note: null,
         },
       });
 
       const atLimits = await create(secondClient.token, {
-        locationLabel: ` ${'📍'.repeat(300)} `,
+        location: { ...payload.location, label: ` ${'📍'.repeat(300)} ` },
         note: ` ${'🐾'.repeat(200)} `,
       });
       expect(atLimits.statusCode).toBe(201);
       expect(atLimits.json()).toMatchObject({
-        data: {
+        item: {
           location: { label: '📍'.repeat(300) },
           note: '🐾'.repeat(200),
         },
       });
 
       const overlong = await create(secondClient.token, {
-        locationLabel: '📍'.repeat(301),
+        location: { ...payload.location, label: '📍'.repeat(301) },
         note: '🐾'.repeat(201),
       });
       expect(overlong.statusCode).toBe(400);
       expect(overlong.json()).toMatchObject({
         error: {
           code: 'VALIDATION_ERROR',
-          details: [
-            { path: '/body/locationLabel' },
-            { path: '/body/note' },
+          fieldErrors: [
+            { field: 'location.label', code: 'MAX_LENGTH_EXCEEDED' },
+            { field: 'note', code: 'MAX_LENGTH_EXCEEDED' },
           ],
         },
       });
@@ -509,7 +513,7 @@ describe('database migrations and constraints', () => {
     try {
       const retries = await Promise.all([app.inject(request), app.inject(request)]);
       expect(retries.map((response) => response.statusCode)).toEqual([201, 201]);
-      const ids = retries.map((response) => response.json<{ data: { id: string } }>().data.id);
+      const ids = retries.map((response) => response.json<{ item: { id: string } }>().item.id);
       expect(new Set(ids).size).toBe(1);
       expect(await database.db.select({ value: count() }).from(observations)).toEqual([{ value: 1 }]);
 
@@ -527,7 +531,7 @@ describe('database migrations and constraints', () => {
       const replayed = await app.inject(request);
       expect(replayed.statusCode).toBe(201);
       expect(replayed.json()).toMatchObject({
-        data: {
+        item: {
           id: observationId,
           votes: { confirm: 1, reject: 1 },
           confirmationPercent: 50,
@@ -543,7 +547,7 @@ describe('database migrations and constraints', () => {
         },
       });
       expect(conflict.statusCode).toBe(409);
-      expect(conflict.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_KEY_REUSED' } });
+      expect(conflict.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_CONFLICT' } });
       expect(await database.db.select({ value: count() }).from(observations)).toEqual([{ value: 1 }]);
 
       await database.db.delete(observations).where(eq(observations.id, observationId));
@@ -660,8 +664,8 @@ describe('database migrations and constraints', () => {
       const created = await app.inject(request);
       const replayed = await app.inject(request);
       expect([created.statusCode, replayed.statusCode]).toEqual([201, 201]);
-      expect(replayed.json<{ data: { id: string } }>().data.id)
-        .toBe(created.json<{ data: { id: string } }>().data.id);
+      expect(replayed.json<{ item: { id: string } }>().item.id)
+        .toBe(created.json<{ item: { id: string } }>().item.id);
       expect(await database.db.select({ value: count() }).from(publicationEvents))
         .toEqual([{ value: 1 }]);
 
@@ -794,7 +798,7 @@ describe('database migrations and constraints', () => {
       expect(ownDetails.statusCode).toBe(200);
       expect(ownDetails.headers['cache-control']).toBe('private, no-store');
       expect(ownDetails.json()).toEqual({
-        data: {
+        item: {
           id: current.id,
           animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
           location: { longitude: 37.6176, latitude: 55.7558, label: 'Парк Горького' },
@@ -812,7 +816,7 @@ describe('database migrations and constraints', () => {
         headers: { authorization: `Bearer ${otherToken}` },
       });
       expect(otherDetails.statusCode).toBe(200);
-      expect(otherDetails.json()).toMatchObject({ data: { userVote: 'reject' } });
+      expect(otherDetails.json()).toMatchObject({ item: { userVote: 'reject' } });
 
       for (const id of [randomUUID(), deleted.id, expired.id]) {
         const missing = await app.inject({
@@ -868,7 +872,7 @@ describe('database migrations and constraints', () => {
         expect(response.statusCode).toBe(200);
         expect(response.headers['cache-control']).toBe('private, no-store');
         expect(response.json()).toMatchObject({
-          data: {
+          item: {
             id: observation.id,
             votes: { confirm: expected.confirm, reject: expected.reject },
             userVote: expected.value,
@@ -906,11 +910,11 @@ describe('database migrations and constraints', () => {
       expect(repeated.every((response) => response.statusCode === 200)).toBe(true);
       expect(repeated.every((response) => {
         const body = response.json<{
-          data: { votes: { confirm: number; reject: number }; userVote: string | null };
+          item: { votes: { confirm: number; reject: number }; userVote: string | null };
         }>();
-        return body.data.votes.confirm === 1
-          && body.data.votes.reject === 0
-          && body.data.userVote === 'confirm';
+        return body.item.votes.confirm === 1
+          && body.item.votes.reject === 0
+          && body.item.userVote === 'confirm';
       })).toBe(true);
       expect(await database.db.select({ value: count() }).from(votes)).toEqual([{ value: 1 }]);
 
@@ -927,12 +931,12 @@ describe('database migrations and constraints', () => {
       })));
       expect(parallel.every((response) => response.statusCode === 200)).toBe(true);
       const returnedCounts = parallel.map((response) => response.json<{
-        data: { votes: { confirm: number }; userVote: string | null };
-      }>().data.votes.confirm).sort((left, right) => left - right);
+        item: { votes: { confirm: number }; userVote: string | null };
+      }>().item.votes.confirm).sort((left, right) => left - right);
       expect(returnedCounts).toEqual(Array.from({ length: 12 }, (_, index) => index + 1));
       expect(parallel.every((response) => response.json<{
-        data: { userVote: string | null };
-      }>().data.userVote === 'confirm')).toBe(true);
+        item: { userVote: string | null };
+      }>().item.userVote === 'confirm')).toBe(true);
       expect(await database.db.select({ value: count() }).from(votes)).toEqual([{ value: 12 }]);
     } finally {
       await app.close();
@@ -1030,8 +1034,8 @@ describe('database migrations and constraints', () => {
 
       const replayed = await disabledApp.inject(request);
       expect(replayed.statusCode).toBe(201);
-      expect(replayed.json<{ data: { note: string | null } }>()).toMatchObject({
-        data: { note: 'Видел у тропы' },
+      expect(replayed.json<{ item: { note: string | null } }>()).toMatchObject({
+        item: { note: 'Видел у тропы' },
       });
 
       const rejected = await disabledApp.inject({

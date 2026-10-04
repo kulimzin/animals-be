@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { errorResponseSchema, successResponseSchema } from '../../shared/http/schemas.js';
+import { errorResponseSchema } from '../../shared/http/schemas.js';
 import { MAP_RESULT_LIMIT, NOTE_MAX_LENGTH } from '../config/public-config.js';
 import type { MapObservationRecord, ObservationDetailsRecord } from './observation-repository.js';
 import type { ObservationService } from './observation-service.js';
@@ -34,9 +34,10 @@ const observationDetailsSchema = z.object({
 
 const createObservationBodySchema = z.object({
   animalId: z.uuid(),
-  location: locationSchema,
+  location: locationSchema.extend({
+    label: optionalText(LOCATION_LABEL_MAX_LENGTH),
+  }),
   observedAt: z.iso.datetime({ offset: true }),
-  locationLabel: optionalText(LOCATION_LABEL_MAX_LENGTH),
   note: optionalText(NOTE_MAX_LENGTH),
 }).strict();
 
@@ -82,7 +83,7 @@ const listObservationsQuerySchema = z.object({
   message: 'South must not be greater than north',
 });
 
-const observationDetailsResponseSchema = successResponseSchema(observationDetailsSchema);
+const observationDetailsResponseSchema = z.object({ item: observationDetailsSchema });
 const mapObservationSchema = z.object({
   id: z.uuid(),
   animalId: z.uuid(),
@@ -164,6 +165,8 @@ export function registerObservationRoutes(
         413: errorResponseSchema,
         422: errorResponseSchema,
         429: errorResponseSchema,
+        500: errorResponseSchema,
+        503: errorResponseSchema,
       },
     },
   }, async (request, reply) => {
@@ -172,13 +175,16 @@ export function registerObservationRoutes(
     const observation = await observationService.create(request.client.id, {
       idempotencyKey: request.headers['idempotency-key'],
       animalId: request.body.animalId,
-      location: request.body.location,
+      location: {
+        longitude: request.body.location.longitude,
+        latitude: request.body.location.latitude,
+      },
       observedAt: new Date(request.body.observedAt),
-      locationLabel: request.body.locationLabel ?? null,
+      locationLabel: request.body.location.label ?? null,
       note: request.body.note ?? null,
     });
     return reply.status(201)
-      .send({ data: toObservationDetailsDto(observation) });
+      .send({ item: toObservationDetailsDto(observation) });
   });
 
   app.withTypeProvider<ZodTypeProvider>().get('/observations/:id', {
@@ -193,13 +199,15 @@ export function registerObservationRoutes(
         400: errorResponseSchema,
         401: errorResponseSchema,
         404: errorResponseSchema,
+        500: errorResponseSchema,
+        503: errorResponseSchema,
       },
     },
   }, async (request, reply) => {
     if (!request.client) throw new Error('Authenticated client is missing');
     const observation = await observationService.getDetails(request.params.id, request.client.id);
     return reply.header('Cache-Control', 'private, no-store')
-      .send({ data: toObservationDetailsDto(observation) });
+      .send({ item: toObservationDetailsDto(observation) });
   });
 
   app.withTypeProvider<ZodTypeProvider>().put('/observations/:id/vote', {
@@ -216,6 +224,8 @@ export function registerObservationRoutes(
         401: errorResponseSchema,
         404: errorResponseSchema,
         413: errorResponseSchema,
+        500: errorResponseSchema,
+        503: errorResponseSchema,
       },
     },
   }, async (request, reply) => {
@@ -226,7 +236,7 @@ export function registerObservationRoutes(
       request.body.value,
     );
     return reply.header('Cache-Control', 'private, no-store')
-      .send({ data: toObservationDetailsDto(observation) });
+      .send({ item: toObservationDetailsDto(observation) });
   });
 
   app.withTypeProvider<ZodTypeProvider>().get('/observations', {
@@ -240,6 +250,8 @@ export function registerObservationRoutes(
         200: listObservationsResponseSchema,
         400: errorResponseSchema,
         401: errorResponseSchema,
+        500: errorResponseSchema,
+        503: errorResponseSchema,
       },
     },
   }, async (request) => {

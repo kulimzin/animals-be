@@ -5,6 +5,13 @@ import {
 } from 'fastify-type-provider-zod';
 import { ApiError } from './api-error.js';
 
+function toFieldName(instancePath: string) {
+  const segments = instancePath.split('/').filter(Boolean);
+  if (['body', 'query', 'params', 'headers'].includes(segments[0] ?? '')) segments.shift();
+  const field = segments.map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~')).join('.');
+  return field || 'request';
+}
+
 function readErrorProperty(error: unknown, property: 'code' | 'statusCode') {
   if (typeof error !== 'object' || error === null) return undefined;
   if (property === 'code' && 'code' in error) return error.code;
@@ -19,9 +26,9 @@ export function registerErrorHandlers(app: FastifyInstance) {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Request validation failed',
-          details: error.validation.map((issue) => ({
-            path: issue.instancePath || '/',
-            message: issue.message ?? 'Invalid value',
+          fieldErrors: error.validation.map((issue) => ({
+            field: toFieldName(issue.instancePath),
+            code: 'INVALID_VALUE',
           })),
         },
         requestId: request.id,
@@ -34,7 +41,7 @@ export function registerErrorHandlers(app: FastifyInstance) {
         error: {
           code: error.code,
           message: error.message,
-          ...(error.details ? { details: error.details } : {}),
+          ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {}),
           ...(error.rateLimit ? {
             retryAfterSeconds: error.rateLimit.retryAfterSeconds,
             availableAt: error.rateLimit.availableAt.toISOString(),

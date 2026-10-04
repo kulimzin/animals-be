@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
 import { buildApp } from '../../src/app.js';
 import { ApiError } from '../../src/shared/http/api-error.js';
 import type { ErrorResponse } from '../../src/shared/http/schemas.js';
@@ -109,6 +110,9 @@ describe('application foundation', () => {
         };
       }>;
     }>();
+    expect(document).toEqual(JSON.parse(
+      await readFile(new URL('../../openapi.json', import.meta.url), 'utf8'),
+    ));
     expect(document).toMatchObject({
       openapi: '3.1.0',
       paths: {
@@ -147,7 +151,11 @@ describe('application foundation', () => {
         'application/json': {
           schema: {
             properties: {
-              locationLabel: { anyOf: [{ type: 'string', maxLength: 300 }, { type: 'null' }] },
+              location: {
+                properties: {
+                  label: { anyOf: [{ type: 'string', maxLength: 300 }, { type: 'null' }] },
+                },
+              },
               note: { anyOf: [{ type: 'string', maxLength: 200 }, { type: 'null' }] },
             },
           },
@@ -201,7 +209,7 @@ describe('application foundation', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.json()).toEqual({
-      data: {
+      item: {
         id: observation.id,
         animalId: observation.animalId,
         location: { ...observation.location, label: 'Парк Горького' },
@@ -274,7 +282,7 @@ describe('application foundation', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.json()).toMatchObject({
-      data: {
+      item: {
         id: observation.id,
         votes: { confirm: 1, reject: 7 },
         userVote: 'confirm',
@@ -378,7 +386,7 @@ describe('application foundation', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      data: [{
+      items: [{
         id: '1fa5309c-29bc-5ac8-8ece-37465a6ff3b4',
         slug: 'tiger',
         name: { ru: 'Тигр', en: 'Tiger' },

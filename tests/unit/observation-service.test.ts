@@ -119,14 +119,9 @@ describe('observation service', () => {
   });
 
   it.each([
-    ['locationLabel', '📍'.repeat(301), '/body/locationLabel', 300],
-    ['note', '🐾'.repeat(201), '/body/note', 200],
-  ] as const)('rejects an overlong %s after normalization', async (
-    field,
-    value,
-    path,
-    maximum,
-  ) => {
+    ['locationLabel', '📍'.repeat(301), 'location.label'],
+    ['note', '🐾'.repeat(201), 'note'],
+  ] as const)('rejects an overlong %s after normalization', async (field, value, apiField) => {
     let createCalls = 0;
     const service = createObservationService(createRepository({
       create: () => {
@@ -139,18 +134,15 @@ describe('observation service', () => {
       .rejects.toMatchObject<ApiError>({
         statusCode: 400,
         code: 'VALIDATION_ERROR',
-        details: [{
-          path,
-          message: `Must contain at most ${maximum} Unicode code points`,
-        }],
+        fieldErrors: [{ field: apiField, code: 'MAX_LENGTH_EXCEEDED' }],
       });
     expect(createCalls).toBe(0);
   });
 
   it.each([
-    ['animal-not-available', 422, 'ANIMAL_NOT_AVAILABLE'],
+    ['animal-not-available', 400, 'VALIDATION_ERROR'],
     ['description-disabled', 422, 'DESCRIPTION_DISABLED'],
-    ['idempotency-conflict', 409, 'IDEMPOTENCY_KEY_REUSED'],
+    ['idempotency-conflict', 409, 'IDEMPOTENCY_CONFLICT'],
     ['idempotency-result-gone', 409, 'IDEMPOTENCY_RESULT_GONE'],
     ['observed-at-invalid', 400, 'VALIDATION_ERROR'],
   ] as const)('maps %s to a stable API error', async (status, statusCode, code) => {
@@ -298,10 +290,7 @@ describe('observation service', () => {
     })).rejects.toMatchObject<ApiError>({
       statusCode: 400,
       code: 'VALIDATION_ERROR',
-      details: [{
-        path: '/query/animalIds',
-        message: 'One or more animals do not exist',
-      }],
+      fieldErrors: [{ field: 'animalIds', code: 'INVALID_VALUE' }],
     });
   });
 });

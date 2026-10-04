@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ApiError } from '../../shared/http/api-error.js';
-import type { ApiErrorDetail } from '../../shared/http/api-error.js';
+import type { ApiFieldError } from '../../shared/http/api-error.js';
 import { createPublicConfig } from '../config/public-config.js';
 import type { PublicConfig } from '../config/public-config.js';
 import type {
@@ -43,23 +43,17 @@ export function createObservationService(
         locationLabel: normalizeOptionalText(draft.locationLabel),
         note: normalizeOptionalText(draft.note),
       };
-      const textErrors: ApiErrorDetail[] = [];
+      const fieldErrors: ApiFieldError[] = [];
       if (normalizedDraft.locationLabel
         && countUnicodeCodePoints(normalizedDraft.locationLabel) > LOCATION_LABEL_MAX_LENGTH) {
-        textErrors.push({
-          path: '/body/locationLabel',
-          message: `Must contain at most ${LOCATION_LABEL_MAX_LENGTH} Unicode code points`,
-        });
+        fieldErrors.push({ field: 'location.label', code: 'MAX_LENGTH_EXCEEDED' });
       }
       if (normalizedDraft.note
         && countUnicodeCodePoints(normalizedDraft.note) > publicConfig.noteMaxLength) {
-        textErrors.push({
-          path: '/body/note',
-          message: `Must contain at most ${publicConfig.noteMaxLength} Unicode code points`,
-        });
+        fieldErrors.push({ field: 'note', code: 'MAX_LENGTH_EXCEEDED' });
       }
-      if (textErrors.length > 0) {
-        throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', textErrors);
+      if (fieldErrors.length > 0) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', fieldErrors);
       }
 
       const result = await repository.create({
@@ -69,10 +63,13 @@ export function createObservationService(
         requestHash: hashObservation(normalizedDraft),
       });
       if (result.status === 'animal-not-available') {
-        throw new ApiError(422, 'ANIMAL_NOT_AVAILABLE', 'Animal is not available for new observations');
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', [{
+          field: 'animalId',
+          code: 'ANIMAL_NOT_AVAILABLE',
+        }]);
       }
       if (result.status === 'idempotency-conflict') {
-        throw new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'Idempotency key was already used for another request');
+        throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Idempotency key was already used for another request');
       }
       if (result.status === 'idempotency-result-gone') {
         throw new ApiError(409, 'IDEMPOTENCY_RESULT_GONE', 'The idempotent observation is no longer available');
@@ -82,8 +79,8 @@ export function createObservationService(
       }
       if (result.status === 'observed-at-invalid') {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', [{
-          path: '/body/observedAt',
-          message: 'Observation time must be within the last 30 days and not in the future',
+          field: 'observedAt',
+          code: 'OUT_OF_RANGE',
         }]);
       }
       if (result.status === 'rate-limited') {
@@ -125,8 +122,8 @@ export function createObservationService(
       const result = await repository.list(input);
       if (result.status === 'animals-not-found') {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', [{
-          path: '/query/animalIds',
-          message: 'One or more animals do not exist',
+          field: 'animalIds',
+          code: 'INVALID_VALUE',
         }]);
       }
       return {

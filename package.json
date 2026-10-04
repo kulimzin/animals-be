@@ -13,6 +13,8 @@
     "lint": "eslint .",
     "test": "vitest run --project unit",
     "test:integration": "node --env-file=.env.test node_modules/vitest/vitest.mjs run --project integration",
+    "openapi:export": "node --import tsx scripts/export-openapi.ts",
+    "openapi:check": "node --import tsx scripts/export-openapi.ts --check",
     "check": "npm run build && npm run lint && npm test",
     "db:up": "docker compose up -d --wait db",
     "db:test:up": "docker compose --env-file .env.test --profile test up -d --wait db-test",

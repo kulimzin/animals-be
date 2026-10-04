@@ -2,12 +2,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { ApiError } from '../../shared/http/api-error.js';
-import { errorResponseSchema, successResponseSchema } from '../../shared/http/schemas.js';
+import { errorResponseSchema } from '../../shared/http/schemas.js';
 import type { ClientService } from './client-service.js';
 import { parseBearerToken } from './client-service.js';
 
 const clientTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/).describe('Anonymous client bearer token');
-const createClientResponseSchema = successResponseSchema(z.object({ token: clientTokenSchema }));
+const createClientResponseSchema = z.object({ token: clientTokenSchema });
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -47,6 +47,8 @@ export function registerClientRoutes(app: FastifyInstance, clientService: Client
         400: errorResponseSchema,
         413: errorResponseSchema,
         429: errorResponseSchema,
+        500: errorResponseSchema,
+        503: errorResponseSchema,
       },
     },
   }, async (request, reply) => {
@@ -56,11 +58,11 @@ export function registerClientRoutes(app: FastifyInstance, clientService: Client
       reply.header('Retry-After', result.retryAfterSeconds);
       throw new ApiError(
         429,
-        'CLIENT_ISSUANCE_RATE_LIMITED',
+        'RATE_LIMITED',
         'Client token issuance rate limit exceeded',
       );
     }
 
-    return reply.status(201).send({ data: { token: result.token } });
+    return reply.status(201).send({ token: result.token });
   });
 }

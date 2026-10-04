@@ -1,0 +1,4009 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Где животное API",
+    "version": "0.1.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {}
+  },
+  "paths": {
+    "/api/v1/clients": {
+      "post": {
+        "operationId": "createClient",
+        "summary": "Issue an anonymous client token",
+        "tags": [
+          "clients"
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{43}$",
+                      "description": "Anonymous client bearer token"
+                    }
+                  },
+                  "required": [
+                    "token"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Prevents storage of the issued bearer token",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Prevents caching responses from the token issuance endpoint",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until another token issuance attempt is allowed",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "operationId": "getConfig",
+        "summary": "Get public application configuration",
+        "tags": [
+          "config"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "descriptionsEnabled": {
+                      "type": "boolean"
+                    },
+                    "noteMaxLength": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "mapResultLimit": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "descriptionsEnabled",
+                    "noteMaxLength",
+                    "mapResultLimit"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/animals": {
+      "get": {
+        "operationId": "listAnimals",
+        "summary": "List animals available for new observations",
+        "tags": [
+          "animals"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "object",
+                            "properties": {
+                              "ru": {
+                                "type": "string"
+                              },
+                              "en": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ru",
+                              "en"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "slug",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observations": {
+      "post": {
+        "operationId": "createObservation",
+        "summary": "Create an observation",
+        "tags": [
+          "observations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "animalId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "location": {
+                    "type": "object",
+                    "properties": {
+                      "longitude": {
+                        "type": "number",
+                        "minimum": -180,
+                        "maximum": 180
+                      },
+                      "latitude": {
+                        "type": "number",
+                        "minimum": -90,
+                        "maximum": 90
+                      },
+                      "label": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 300
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "longitude",
+                      "latitude"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "observedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "animalId",
+                  "location",
+                  "observedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "item": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "animalId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "location": {
+                          "type": "object",
+                          "properties": {
+                            "longitude": {
+                              "type": "number",
+                              "minimum": -180,
+                              "maximum": 180
+                            },
+                            "latitude": {
+                              "type": "number",
+                              "minimum": -90,
+                              "maximum": 90
+                            },
+                            "label": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "longitude",
+                            "latitude",
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "note": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "votes": {
+                          "type": "object",
+                          "properties": {
+                            "confirm": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "reject": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "confirm",
+                            "reject"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "confirmationPercent": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "userVote": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "confirm",
+                                "reject"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "animalId",
+                        "location",
+                        "observedAt",
+                        "note",
+                        "votes",
+                        "confirmationPercent",
+                        "userVote"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "item"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Prevents shared caching of the personalized userVote value",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "private, no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Prevents shared caching of the client-specific publication limit",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "private, no-store"
+                  ]
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until another observation may be published",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listObservations",
+        "summary": "List observations",
+        "tags": [
+          "observations"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "animalIds",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "24h",
+                "7d",
+                "30d"
+              ]
+            },
+            "in": "query",
+            "name": "period",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            "in": "query",
+            "name": "west",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "in": "query",
+            "name": "south",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            "in": "query",
+            "name": "east",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "in": "query",
+            "name": "north",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "animalId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "location": {
+                            "type": "object",
+                            "properties": {
+                              "longitude": {
+                                "type": "number",
+                                "minimum": -180,
+                                "maximum": 180
+                              },
+                              "latitude": {
+                                "type": "number",
+                                "minimum": -90,
+                                "maximum": 90
+                              }
+                            },
+                            "required": [
+                              "longitude",
+                              "latitude"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "observedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "votes": {
+                            "type": "object",
+                            "properties": {
+                              "confirm": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "reject": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "confirm",
+                              "reject"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "confirmationPercent": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 100
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "animalId",
+                          "location",
+                          "observedAt",
+                          "votes",
+                          "confirmationPercent"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "limit": {
+                      "type": "number",
+                      "enum": [
+                        2000
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "truncated",
+                    "limit"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observations/{id}": {
+      "get": {
+        "operationId": "getObservation",
+        "summary": "Get observation details",
+        "tags": [
+          "observations"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "item": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "animalId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "location": {
+                          "type": "object",
+                          "properties": {
+                            "longitude": {
+                              "type": "number",
+                              "minimum": -180,
+                              "maximum": 180
+                            },
+                            "latitude": {
+                              "type": "number",
+                              "minimum": -90,
+                              "maximum": 90
+                            },
+                            "label": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "longitude",
+                            "latitude",
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "note": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "votes": {
+                          "type": "object",
+                          "properties": {
+                            "confirm": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "reject": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "confirm",
+                            "reject"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "confirmationPercent": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "userVote": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "confirm",
+                                "reject"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "animalId",
+                        "location",
+                        "observedAt",
+                        "note",
+                        "votes",
+                        "confirmationPercent",
+                        "userVote"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "item"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Prevents shared caching of the personalized userVote value",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "private, no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observations/{id}/vote": {
+      "put": {
+        "operationId": "voteObservation",
+        "summary": "Set or remove the current client vote for an observation",
+        "tags": [
+          "observations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "confirm",
+                          "reject"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "item": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "animalId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "location": {
+                          "type": "object",
+                          "properties": {
+                            "longitude": {
+                              "type": "number",
+                              "minimum": -180,
+                              "maximum": 180
+                            },
+                            "latitude": {
+                              "type": "number",
+                              "minimum": -90,
+                              "maximum": 90
+                            },
+                            "label": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "longitude",
+                            "latitude",
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "note": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "votes": {
+                          "type": "object",
+                          "properties": {
+                            "confirm": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "reject": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "confirm",
+                            "reject"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "confirmationPercent": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "userVote": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "confirm",
+                                "reject"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "animalId",
+                        "location",
+                        "observedAt",
+                        "note",
+                        "votes",
+                        "confirmationPercent",
+                        "userVote"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "item"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Prevents shared caching of the personalized userVote value",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "private, no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CLIENT_TOKEN_INVALID",
+                            "CLIENT_TOKEN_REQUIRED",
+                            "DESCRIPTION_DISABLED",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_RESULT_GONE",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "OBSERVATION_NOT_FOUND",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "REQUEST_INVALID",
+                            "SERVICE_UNAVAILABLE",
+                            "TEXT_CONTENT_REJECTED",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "fieldErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "ANIMAL_NOT_AVAILABLE",
+                                  "INVALID_VALUE",
+                                  "MAX_LENGTH_EXCEEDED",
+                                  "OUT_OF_RANGE"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "code"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "retryAfterSeconds": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "availableAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "requestId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "animals",
+      "description": "Animal directory"
+    },
+    {
+      "name": "clients",
+      "description": "Anonymous browser clients"
+    },
+    {
+      "name": "config",
+      "description": "Public application configuration"
+    },
+    {
+      "name": "observations",
+      "description": "Animal observations"
+    }
+  ]
+}

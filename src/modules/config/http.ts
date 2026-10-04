@@ -20,6 +20,8 @@ export function registerConfigRoutes(app: FastifyInstance, publicConfig: PublicC
       response: {
         200: publicConfigSchema,
         401: errorResponseSchema,
+        500: errorResponseSchema,
+        503: errorResponseSchema,
       },
     },
   }, () => publicConfig);

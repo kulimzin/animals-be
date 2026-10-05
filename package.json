@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node --env-file=.env --watch --import tsx src/server.ts",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node --env-file=.env dist/server.js",
+    "start": "node --env-file-if-exists=.env dist/server.js",
     "lint": "eslint .",
     "test": "vitest run --project unit",
     "test:integration": "node --env-file=.env.test node_modules/vitest/vitest.mjs run --project integration",
@@ -19,7 +19,7 @@
     "db:up": "docker compose up -d --wait db",
     "db:test:up": "docker compose --env-file .env.test --profile test up -d --wait db-test",
     "db:generate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs generate",
-    "db:migrate": "node --env-file=.env --import tsx src/infrastructure/database/migrate.ts"
+    "db:migrate": "node --env-file-if-exists=.env --import tsx src/infrastructure/database/migrate.ts"
   },
   "dependencies": {
     "@fastify/swagger": "^9.9.0",

@@ -1,0 +1,11 @@
+.git
+.env*
+.agent-instructions
+AGENTS.md
+node_modules
+dist
+coverage
+tests
+scripts
+docs
+*.tsbuildinfo

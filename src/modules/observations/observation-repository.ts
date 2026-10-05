@@ -203,7 +203,8 @@ export function createPostgresObservationRepository(database: Database): Observa
         const [animal] = await transaction.select({ id: animals.id })
           .from(animals)
           .where(and(eq(animals.id, input.animalId), eq(animals.isActive, true)))
-          .for('update')
+          // Allow concurrent publications while preventing a status change racing this check.
+          .for('share')
           .limit(1);
         if (!animal) return { status: 'animal-not-available' };
 

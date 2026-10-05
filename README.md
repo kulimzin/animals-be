@@ -10,13 +10,12 @@ Drizzle и Zod. Схемы запросов и ответов валидирую
 ```sh
 npm ci
 cp .env.example .env
-cp .env.test.example .env.test
 ```
 
-В `.env` замените оба `replace-with-generated-password` одним случайным паролем,
-а в `.env.test` — оба `replace-with-generated-test-password` другим паролем.
-Для генерации каждого пароля можно использовать `openssl rand -hex 24`.
-Настоящие пароли и файлы окружения не коммитятся.
+В `.env` замените оба `replace-with-generated-password` одним случайным паролем.
+Для его генерации можно использовать `openssl rand -hex 24`. Локальные файлы
+окружения и настоящие пароли не коммитятся. Настройка `.env.test` для запуска
+сервера не нужна; она описана в разделе интеграционных проверок.
 
 `DESCRIPTIONS_ENABLED` управляет публикацией новых непустых описаний: при `false`
 API возвращает `422 DESCRIPTION_DISABLED`. По умолчанию описания разрешены.
@@ -178,6 +177,16 @@ npm run check
 и unit-тесты Vitest. Unit-тестам БД не нужна.
 
 Отдельная интеграционная проверка настоящей PostgreSQL/PostGIS:
+
+```sh
+cp .env.test.example .env.test
+```
+
+Перед запуском замените оба `replace-with-generated-test-password` в `.env.test`
+одним паролем, отличным от пароля в `.env`. Для генерации можно использовать
+`openssl rand -hex 24`.
+
+Затем запустите тестовую БД и интеграционные тесты:
 
 ```sh
 npm run db:test:up

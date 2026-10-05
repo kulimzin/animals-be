@@ -24,7 +24,9 @@ export function createPostgresClientRepository(database: Database): ClientReposi
           select pg_advisory_xact_lock(hashtextextended(${ipHash}, 0))
         `);
 
-        const databaseTime = await transaction.execute<{ now: string }>(sql`select now() as now`);
+        const databaseTime = await transaction.execute<{ now: string }>(
+          sql`select clock_timestamp() as now`,
+        );
         const now = new Date(databaseTime.rows[0]?.now ?? Number.NaN);
         if (Number.isNaN(now.getTime())) throw new Error('Database did not return its current time');
 

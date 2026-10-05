@@ -83,6 +83,24 @@ async function seedAuthenticatedClient(token = 'c'.repeat(43)) {
   return { clientId: client.id, token };
 }
 
+async function waitForBlockedShareQuery() {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await database.pool.query<{ query: string }>(`
+      SELECT query
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+        AND pid <> pg_backend_pid()
+        AND wait_event_type = 'Lock'
+        AND query ILIKE '%FOR SHARE%'
+      LIMIT 1
+    `);
+    if (result.rows[0]) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Observation creation did not wait for the animal status lock');
+}
+
 describe('database migrations and constraints', () => {
   beforeAll(async () => {
     await database.pool.query('DROP SCHEMA public CASCADE');
@@ -426,6 +444,108 @@ describe('database migrations and constraints', () => {
       expect(tooOld.statusCode).toBe(400);
       expect(tooOld.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
     } finally {
+      await app.close();
+    }
+  });
+
+  it('allows observation creation alongside another shared lock on the same animal', async () => {
+    const { token } = await seedAuthenticatedClient();
+    const app = buildApp({ animalService, clientService, observationService });
+    const lockConnection = await database.pool.connect();
+    let transactionOpen = false;
+    try {
+      await lockConnection.query('BEGIN');
+      transactionOpen = true;
+      await lockConnection.query(
+        'SELECT id FROM animals WHERE id = $1 FOR SHARE',
+        ['423e53fb-01c1-521b-8b29-6cccf5268618'],
+      );
+
+      const createRequest = app.inject({
+        method: 'POST',
+        url: '/api/v1/observations',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'idempotency-key': randomUUID(),
+        },
+        payload: {
+          animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+          location: { longitude: 37.6176, latitude: 55.7558 },
+          observedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+      });
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const outcome = await Promise.race([
+        createRequest.then((response) => ({ kind: 'response' as const, response })),
+        new Promise<{ kind: 'timeout' }>((resolve) => {
+          timeout = setTimeout(() => resolve({ kind: 'timeout' }), 2_000);
+        }),
+      ]);
+      if (timeout) clearTimeout(timeout);
+
+      await lockConnection.query('ROLLBACK');
+      transactionOpen = false;
+      const response = outcome.kind === 'response' ? outcome.response : await createRequest;
+      expect(outcome.kind).toBe('response');
+      expect(response.statusCode).toBe(201);
+    } finally {
+      if (transactionOpen) await lockConnection.query('ROLLBACK');
+      lockConnection.release();
+      await app.close();
+    }
+  });
+
+  it('waits for a concurrent animal deactivation and then rejects publication', async () => {
+    const { token } = await seedAuthenticatedClient();
+    const app = buildApp({ animalService, clientService, observationService });
+    const deactivation = await database.pool.connect();
+    let transactionOpen = false;
+    try {
+      await deactivation.query('BEGIN');
+      transactionOpen = true;
+      await deactivation.query(
+        'UPDATE animals SET is_active = false WHERE id = $1',
+        ['423e53fb-01c1-521b-8b29-6cccf5268618'],
+      );
+
+      const createRequest = app.inject({
+        method: 'POST',
+        url: '/api/v1/observations',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'idempotency-key': randomUUID(),
+        },
+        payload: {
+          animalId: '423e53fb-01c1-521b-8b29-6cccf5268618',
+          location: { longitude: 37.6176, latitude: 55.7558 },
+          observedAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+      });
+      let waitError: Error | undefined;
+      try {
+        await waitForBlockedShareQuery();
+      } catch (error) {
+        waitError = error instanceof Error
+          ? error
+          : new Error('Failed to observe the animal status lock wait', { cause: error });
+      }
+
+      await deactivation.query('COMMIT');
+      transactionOpen = false;
+      const response = await createRequest;
+      if (waitError) throw waitError;
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: {
+          code: 'VALIDATION_ERROR',
+          fieldErrors: [{ field: 'animalId', code: 'ANIMAL_NOT_AVAILABLE' }],
+        },
+      });
+      expect(await database.db.select({ value: count() }).from(observations))
+        .toEqual([{ value: 0 }]);
+    } finally {
+      if (transactionOpen) await deactivation.query('ROLLBACK');
+      deactivation.release();
       await app.close();
     }
   });
